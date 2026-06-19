@@ -3,6 +3,7 @@ let pageContext = null;
 let conversationHistory = [];
 let isFetchingModels = false;
 let lastDebugInfo = { systemContent: '', userText: '' }; // Store last sent context
+let currentTabId = null; // Track current tab for conversation keying
 
 // DOM Elements
 const chatContainer = document.getElementById('chatContainer');
@@ -190,6 +191,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   statusEl.textContent = '加载页面...';
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  currentTabId = tab.id;
 
   try {
     const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE_CONTENT' });
@@ -211,6 +213,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     pageTitleEl.textContent = '无法访问此页面';
     pageUrlEl.textContent = error.message;
     statusEl.textContent = '页面错误';
+  }
+
+  // Load saved conversation for this tab
+  const saved = await loadConversation(currentTabId);
+  if (saved && saved.history && saved.history.length > 0) {
+    conversationHistory = saved.history;
+    renderConversation();
+    statusEl.textContent = '已恢复对话';
+    setTimeout(() => {
+      if (statusEl.textContent === '已恢复对话') {
+        statusEl.textContent = '就绪';
+      }
+    }, 2000);
   }
 });
 
@@ -295,6 +310,7 @@ async function sendMessage() {
   addMessage('user', text);
   userInput.value = '';
   conversationHistory.push({ role: 'user', content: text });
+  await saveConversation();
 
   showLoading(true);
   sendBtn.disabled = true;
@@ -327,11 +343,13 @@ async function sendMessage() {
 
     addMessage('assistant', response.content);
     conversationHistory.push({ role: 'assistant', content: response.content });
+    await saveConversation();
     statusEl.textContent = '就绪';
 
   } catch (error) {
     addMessage('error', `错误: ${error.message}`);
     conversationHistory.pop();
+    await saveConversation();
     statusEl.textContent = '就绪';
   } finally {
     showLoading(false);
@@ -369,6 +387,51 @@ userInput.addEventListener('input', () => {
   userInput.style.height = Math.min(userInput.scrollHeight, 100) + 'px';
 });
 
+// ============ Conversation Persistence ============
+
+// Get storage key for current tab
+function getConversationKey() {
+  return `conversation_${currentTabId}`;
+}
+
+// Save conversation history to storage
+async function saveConversation() {
+  if (!currentTabId) return;
+  try {
+    const key = getConversationKey();
+    await chrome.storage.local.set({
+      [key]: {
+        history: conversationHistory,
+        pageContext: pageContext,
+        savedAt: Date.now()
+      }
+    });
+  } catch (error) {
+    console.error('Error saving conversation:', error);
+  }
+}
+
+// Load conversation history from storage
+async function loadConversation(tabId) {
+  try {
+    const key = `conversation_${tabId}`;
+    const result = await chrome.storage.local.get([key]);
+    if (result[key]) {
+      return result[key];
+    }
+  } catch (error) {
+    console.error('Error loading conversation:', error);
+  }
+  return null;
+}
+
+// Render existing conversation messages
+function renderConversation() {
+  conversationHistory.forEach(msg => {
+    addMessage(msg.role, msg.content);
+  });
+}
+
 // ============ Debug Modal ============
 const debugModal = document.getElementById('debugModal');
 const debugContent = document.getElementById('debugContent');
@@ -401,5 +464,19 @@ debugClose.addEventListener('click', hideDebugModal);
 debugModal.addEventListener('click', (e) => {
   if (e.target === debugModal) {
     hideDebugModal();
+  }
+});
+
+// ============ Clear Conversation ============
+const clearBtn = document.getElementById('clearBtn');
+
+clearBtn.addEventListener('click', async () => {
+  if (conversationHistory.length === 0) return;
+
+  if (confirm('确定要清空当前对话记录吗？')) {
+    conversationHistory = [];
+    chatContainer.innerHTML = '';
+    addMessage('assistant', '对话已清空。');
+    await chrome.storage.local.remove([getConversationKey()]);
   }
 });
