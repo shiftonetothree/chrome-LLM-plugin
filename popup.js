@@ -190,11 +190,81 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   statusEl.textContent = '加载页面...';
 
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  currentTabId = tab.id;
+  // Use the background-tracked active content tab (not the sidepanel's own tab)
+  const currentWindow = await chrome.windows.getLastFocused();
+  const resp = await chrome.runtime.sendMessage({
+    type: 'GET_ACTIVE_CONTENT_TAB',
+    windowId: currentWindow.id
+  });
+  currentTabId = resp.tabId;
+
+  if (currentTabId) {
+    try {
+      const response = await chrome.tabs.sendMessage(currentTabId, { type: 'GET_PAGE_CONTENT' });
+
+      if (response && response.content) {
+        pageContext = response.content;
+        pageTitleEl.textContent = pageContext.title || '无标题页面';
+        pageUrlEl.textContent = pageContext.url;
+        document.getElementById('contextBanner').style.borderLeft = '3px solid #4ade80';
+        statusEl.textContent = '就绪';
+        statusEl.classList.add('ready');
+      } else {
+        pageContext = null;
+        pageTitleEl.textContent = '无法提取页面内容';
+        statusEl.textContent = '页面受限';
+      }
+    } catch (error) {
+      pageContext = null;
+      pageTitleEl.textContent = '无法访问此页面';
+      pageUrlEl.textContent = error.message;
+      statusEl.textContent = '页面错误';
+    }
+  } else {
+    pageContext = null;
+    pageTitleEl.textContent = '无可用页面';
+    statusEl.textContent = '无活动页面';
+  }
+
+  // Load saved conversation for this tab
+  if (currentTabId) {
+    const saved = await loadConversation(currentTabId);
+    if (saved && saved.history && saved.history.length > 0) {
+      conversationHistory = saved.history;
+      renderConversation();
+      statusEl.textContent = '已恢复对话';
+      setTimeout(() => {
+        if (statusEl.textContent === '已恢复对话') {
+          statusEl.textContent = '就绪';
+        }
+      }, 2000);
+    }
+  }
+});
+
+// Listen for tab switches to update context and conversation
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  const { tabId, windowId } = activeInfo;
+
+  // Only handle events for the current extension page's window
+  const currentWindow = await chrome.windows.getLastFocused();
+  if (windowId !== currentWindow.id) return;
+
+  currentTabId = tabId;
+
+  // Clear current UI and load new tab's context
+  chatContainer.innerHTML = '';
+  conversationHistory = [];
+
+  // Refresh page context from new tab
+  statusEl.textContent = '加载页面...';
+  pageContext = null;
+  pageTitleEl.textContent = '正在加载页面内容...';
+  pageUrlEl.textContent = '';
+  document.getElementById('contextBanner').style.borderLeft = '3px solid #666';
 
   try {
-    const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE_CONTENT' });
+    const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_PAGE_CONTENT' });
 
     if (response && response.content) {
       pageContext = response.content;
@@ -204,28 +274,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       statusEl.textContent = '就绪';
       statusEl.classList.add('ready');
     } else {
-      pageContext = null;
       pageTitleEl.textContent = '无法提取页面内容';
       statusEl.textContent = '页面受限';
     }
   } catch (error) {
-    pageContext = null;
     pageTitleEl.textContent = '无法访问此页面';
     pageUrlEl.textContent = error.message;
     statusEl.textContent = '页面错误';
   }
 
-  // Load saved conversation for this tab
-  const saved = await loadConversation(currentTabId);
+  // Load saved conversation for new tab
+  const saved = await loadConversation(tabId);
   if (saved && saved.history && saved.history.length > 0) {
     conversationHistory = saved.history;
     renderConversation();
-    statusEl.textContent = '已恢复对话';
-    setTimeout(() => {
-      if (statusEl.textContent === '已恢复对话') {
-        statusEl.textContent = '就绪';
-      }
-    }, 2000);
   }
 });
 
@@ -261,11 +323,11 @@ refreshModelsBtn.addEventListener('click', () => {
   fetchModels();
 });
 
-// Fetch fresh page context
+// Fetch fresh page context from the current content tab
 async function refreshPageContext() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!currentTabId) return false;
   try {
-    const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE_CONTENT' });
+    const response = await chrome.tabs.sendMessage(currentTabId, { type: 'GET_PAGE_CONTENT' });
     if (response && response.content) {
       pageContext = response.content;
       pageTitleEl.textContent = pageContext.title || '无标题页面';
