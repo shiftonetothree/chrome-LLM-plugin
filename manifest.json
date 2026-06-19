@@ -22,7 +22,7 @@
       "128": "icons/icon128.png"
     }
   },
-  "sidePanel": {
+  "side_panel": {
     "default_path": "sidepanel.html"
   },
   "icons": {
