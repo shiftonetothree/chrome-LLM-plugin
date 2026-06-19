@@ -362,7 +362,11 @@ async function sendMessage() {
 function addMessage(role, content) {
   const msg = document.createElement('div');
   msg.className = `message ${role}`;
-  msg.textContent = content;
+  if (role === 'assistant' && typeof marked !== 'undefined') {
+    msg.innerHTML = marked.parse(content);
+  } else {
+    msg.textContent = content;
+  }
   chatContainer.appendChild(msg);
   chatContainer.scrollTop = chatContainer.scrollHeight;
 }
