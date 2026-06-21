@@ -429,6 +429,7 @@ function addMessage(role, content) {
   } else {
     msg.textContent = content;
   }
+  msg.style.fontSize = (fontSizeSlider?.value || 12) + 'px';
   chatContainer.appendChild(msg);
   chatContainer.scrollTop = chatContainer.scrollHeight;
 }
@@ -546,3 +547,36 @@ clearBtn.addEventListener('click', async () => {
     await chrome.storage.local.remove([getConversationKey()]);
   }
 });
+
+// ============ Font Size Control ============
+const fontSizeSlider = document.getElementById('fontSizeSlider');
+const fontSizeValue = document.getElementById('fontSizeValue');
+const chatMessages = document.querySelectorAll('.message');
+
+async function loadFontSize() {
+  const result = await chrome.storage.local.get(['fontSize']);
+  if (result.fontSize) {
+    fontSizeSlider.value = result.fontSize;
+    fontSizeValue.textContent = result.fontSize;
+    applyFontSize(result.fontSize);
+  }
+}
+
+function applyFontSize(size) {
+  document.querySelectorAll('.message').forEach(msg => {
+    msg.style.fontSize = size + 'px';
+  });
+}
+
+fontSizeSlider.addEventListener('input', () => {
+  const size = fontSizeSlider.value;
+  fontSizeValue.textContent = size;
+  applyFontSize(size);
+});
+
+fontSizeSlider.addEventListener('change', async () => {
+  await chrome.storage.local.set({ fontSize: fontSizeSlider.value });
+});
+
+// Initialize font size on load
+loadFontSize();

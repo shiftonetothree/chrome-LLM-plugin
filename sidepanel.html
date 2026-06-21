@@ -22,14 +22,14 @@
       height: 100%;
       display: flex;
       flex-direction: column;
-      background: #1a1a2e;
-      color: #eee;
+      background: #FAF8F0;
+      color: #4A4A4A;
     }
 
     .header {
       padding: 10px 14px;
-      background: #16213e;
-      border-bottom: 1px solid #0f3460;
+      background: #E8E2D6;
+      border-bottom: 1px solid #C9BFA8;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -39,7 +39,7 @@
     .header h1 {
       font-size: 13px;
       font-weight: 600;
-      color: #e94560;
+      color: #8B7355;
     }
 
     .header-controls {
@@ -50,31 +50,93 @@
 
     .debug-btn {
       padding: 4px 8px;
-      background: #0f3460;
+      background: #C9BFA8;
       border: none;
       border-radius: 4px;
-      color: #888;
+      color: #5A5A5A;
       font-size: 10px;
       cursor: pointer;
       transition: all 0.2s;
     }
 
     .debug-btn:hover {
-      background: #e94560;
+      background: #8B7355;
       color: white;
+    }
+
+    .clear-btn {
+      padding: 4px 8px;
+      background: #C9BFA8;
+      border: none;
+      border-radius: 4px;
+      color: #5A5A5A;
+      font-size: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .clear-btn:hover {
+      background: #B85C4A;
+      color: white;
+    }
+
+    .font-size-control {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .font-size-control label {
+      font-size: 10px;
+      color: #7A7A7A;
+    }
+
+    .font-size-slider {
+      width: 60px;
+      height: 4px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: #C9BFA8;
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .font-size-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px;
+      height: 12px;
+      background: #8B7355;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    .font-size-slider::-moz-range-thumb {
+      width: 12px;
+      height: 12px;
+      background: #8B7355;
+      border-radius: 50%;
+      cursor: pointer;
+      border: none;
+    }
+
+    .font-size-value {
+      font-size: 10px;
+      color: #7A7A7A;
+      min-width: 28px;
     }
 
     .status {
       font-size: 10px;
-      color: #888;
+      color: #7A7A7A;
     }
 
-    .status.ready { color: #4ade80; }
-    .status.error { color: #ef4444; }
+    .status.ready { color: #6B9E6B; }
+    .status.error { color: #C45C5C; }
 
     .config-section {
-      background: #16213e;
-      border-bottom: 1px solid #0f3460;
+      background: #E8E2D6;
+      border-bottom: 1px solid #C9BFA8;
       padding: 10px;
       display: flex;
       flex-direction: column;
@@ -92,7 +154,7 @@
 
     .config-row label {
       font-size: 10px;
-      color: #888;
+      color: #6B6B6B;
       min-width: 45px;
     }
 
@@ -100,17 +162,17 @@
     .config-row input {
       flex: 1;
       padding: 5px 8px;
-      background: #1a1a2e;
-      border: 1px solid #0f3460;
+      background: #FAF8F0;
+      border: 1px solid #C9BFA8;
       border-radius: 4px;
-      color: #eee;
+      color: #4A4A4A;
       font-size: 11px;
     }
 
     .config-row select:focus,
     .config-row input:focus {
       outline: none;
-      border-color: #e94560;
+      border-color: #8B7355;
     }
 
     .config-row select {
@@ -133,17 +195,17 @@
 
     .model-row label {
       font-size: 10px;
-      color: #888;
+      color: #6B6B6B;
       min-width: 45px;
     }
 
     .model-select {
       flex: 1;
       padding: 5px 8px;
-      background: #1a1a2e;
-      border: 1px solid #0f3460;
+      background: #FAF8F0;
+      border: 1px solid #C9BFA8;
       border-radius: 4px;
-      color: #eee;
+      color: #4A4A4A;
       font-size: 11px;
     }
 
@@ -154,26 +216,26 @@
 
     .refresh-models-btn {
       padding: 4px 8px;
-      background: #0f3460;
+      background: #C9BFA8;
       border: none;
       border-radius: 4px;
-      color: #888;
+      color: #5A5A5A;
       font-size: 10px;
       cursor: pointer;
       transition: all 0.2s;
     }
 
     .refresh-models-btn:hover {
-      background: #e94560;
+      background: #8B7355;
       color: white;
     }
 
     .context-banner {
-      background: #0f3460;
+      background: #E8E2D6;
       padding: 6px 10px;
       font-size: 10px;
-      color: #a5b4fc;
-      border-bottom: 1px solid #1e3a5f;
+      color: #7A8B6F;
+      border-bottom: 1px solid #C9BFA8;
       flex-shrink: 0;
     }
 
@@ -212,28 +274,28 @@
     }
 
     .message.user {
-      background: #e94560;
+      background: #8B7355;
       color: white;
       align-self: flex-end;
       border-bottom-right-radius: 4px;
     }
 
     .message.assistant {
-      background: #16213e;
+      background: #E8E2D6;
       align-self: flex-start;
       border-bottom-left-radius: 4px;
-      border: 1px solid #0f3460;
+      border: 1px solid #C9BFA8;
     }
 
     .message.error {
-      background: #dc2626;
+      background: #C45C5C;
       color: white;
       align-self: flex-start;
     }
 
     .message.loading {
-      background: #16213e;
-      color: #888;
+      background: #E8E2D6;
+      color: #7A7A7A;
       align-self: flex-start;
       font-style: italic;
     }
@@ -254,8 +316,8 @@
     .spinner {
       width: 12px;
       height: 12px;
-      border: 2px solid #333;
-      border-top-color: #e94560;
+      border: 2px solid #C9BFA8;
+      border-top-color: #8B7355;
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
     }
@@ -266,8 +328,8 @@
 
     .input-area {
       padding: 10px;
-      background: #16213e;
-      border-top: 1px solid #0f3460;
+      background: #E8E2D6;
+      border-top: 1px solid #C9BFA8;
       flex-shrink: 0;
     }
 
@@ -279,10 +341,10 @@
     .input-row textarea {
       flex: 1;
       padding: 8px 10px;
-      background: #1a1a2e;
-      border: 1px solid #0f3460;
+      background: #FAF8F0;
+      border: 1px solid #C9BFA8;
       border-radius: 6px;
-      color: #eee;
+      color: #4A4A4A;
       font-size: 12px;
       resize: none;
       font-family: inherit;
@@ -291,16 +353,16 @@
 
     .input-row textarea:focus {
       outline: none;
-      border-color: #e94560;
+      border-color: #8B7355;
     }
 
     .input-row textarea::placeholder {
-      color: #666;
+      color: #9A9A9A;
     }
 
     .send-btn {
       padding: 8px 14px;
-      background: #e94560;
+      background: #8B7355;
       color: white;
       border: none;
       border-radius: 6px;
@@ -312,11 +374,11 @@
     }
 
     .send-btn:hover:not(:disabled) {
-      background: #d63d56;
+      background: #7A6548;
     }
 
     .send-btn:disabled {
-      background: #555;
+      background: #B8B0A0;
       cursor: not-allowed;
     }
 
@@ -328,7 +390,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0,0,0,0.85);
+      background: rgba(139, 115, 85, 0.85);
       z-index: 1000;
       padding: 16px;
       box-sizing: border-box;
@@ -340,18 +402,18 @@
     }
 
     .debug-modal h3 {
-      color: #e94560;
+      color: #8B7355;
       font-size: 13px;
       margin-bottom: 8px;
     }
 
     .debug-modal .debug-content {
       flex: 1;
-      background: #1a1a2e;
-      border: 1px solid #0f3460;
+      background: #FAF8F0;
+      border: 1px solid #C9BFA8;
       border-radius: 6px;
       padding: 10px;
-      color: #aaa;
+      color: #6B6B6B;
       font-size: 11px;
       line-height: 1.5;
       white-space: pre-wrap;
@@ -375,13 +437,13 @@
     }
 
     .debug-modal .close-btn {
-      background: #555;
-      color: white;
+      background: #B8B0A0;
+      color: #4A4A4A;
     }
 
     /* Markdown styles */
     .message.assistant code {
-      background: #0f3460;
+      background: #C9BFA8;
       padding: 2px 5px;
       border-radius: 3px;
       font-size: 11px;
@@ -389,7 +451,7 @@
     }
 
     .message.assistant pre {
-      background: #0f3460;
+      background: #C9BFA8;
       padding: 8px;
       border-radius: 6px;
       overflow-x: auto;
@@ -402,7 +464,7 @@
     }
 
     .message.assistant a {
-      color: #a5b4fc;
+      color: #7A8B6F;
     }
 
     .message.assistant ul, .message.assistant ol {
@@ -411,10 +473,10 @@
     }
 
     .message.assistant blockquote {
-      border-left: 3px solid #e94560;
+      border-left: 3px solid #8B7355;
       padding-left: 10px;
       margin: 6px 0;
-      color: #aaa;
+      color: #6B6B6B;
     }
   </style>
 </head>
@@ -422,6 +484,12 @@
   <div class="header">
     <h1>🤖 AI Browser Assistant</h1>
     <div class="header-controls">
+      <div class="font-size-control">
+        <label>A</label>
+        <input type="range" class="font-size-slider" id="fontSizeSlider" min="10" max="18" value="12">
+        <span class="font-size-value" id="fontSizeValue">12</span>
+      </div>
+      <button class="clear-btn" id="clearBtn">🗑️</button>
       <button class="debug-btn" id="debugBtn">🔧 调试</button>
       <span class="status" id="status">初始化中...</span>
     </div>
