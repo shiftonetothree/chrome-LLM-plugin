@@ -295,7 +295,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         console.log('[POPUP] Stream done, streamingContent length:', streamingContent.length);
 
         // Use streamingContent which has the final accumulated content
-        streamingMessageElement.textContent = streamingContent;
+        // Render markdown
+        if (typeof marked !== 'undefined' && streamingContent) {
+          streamingMessageElement.innerHTML = marked.parse(streamingContent);
+        } else {
+          streamingMessageElement.textContent = streamingContent;
+        }
         streamingMessageElement.style.fontSize = currentFontSize + 'px';
         streamingMessageElement.classList.remove('streaming');
         streamingMessageElement = null;
@@ -314,10 +319,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       // background.js sends accumulated fullContent, use it directly for display
       streamingContent = content;
 
-      // Update streaming content
+      // Update streaming content - render markdown while streaming
       if (streamingMessageElement) {
         const currentFontSize = fontSizeSlider?.value || 12;
-        streamingMessageElement.textContent = content;
+        if (typeof marked !== 'undefined' && content) {
+          streamingMessageElement.innerHTML = marked.parse(content) + '<span class="streaming-cursor">▊</span>';
+        } else {
+          streamingMessageElement.textContent = content;
+        }
         streamingMessageElement.style.fontSize = currentFontSize + 'px';
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }
