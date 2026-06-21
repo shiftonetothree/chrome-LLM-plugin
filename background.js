@@ -46,9 +46,16 @@ const PROVIDERS = {
 // Handle messages from popup / sidepanel
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'SEND_TO_AI') {
-    sendToLLM(request.config, request.messages)
-      .then(response => sendResponse(response))
-      .catch(error => sendResponse({ error: error.message }));
+    // For streaming, we don't wait for response - chunks are sent via chrome.runtime.sendMessage
+    sendToLLM(request.config, request.messages, request.senderTabId).catch(error => {
+      console.error('[DEBUG] sendToLLM error:', error);
+      chrome.runtime.sendMessage({
+        type: 'STREAM_ERROR',
+        error: error.message,
+        senderTabId: request.senderTabId
+      }).catch(() => {});
+    });
+    sendResponse({ started: true });
     return true;
   }
 
@@ -179,14 +186,17 @@ async function fetchModels(config) {
   }
 }
 
-async function sendToLLM(config, messages) {
+async function sendToLLM(config, messages, senderTabId) {
   const { provider, apiKey, model, customEndpoint } = config;
+  console.log('[DEBUG] sendToLLM called, provider:', provider, 'model:', model);
 
   if (!apiKey) {
+    console.error('[DEBUG] No API key');
     throw new Error('请先填写 API Key');
   }
 
   if (!model) {
+    console.error('[DEBUG] No model');
     throw new Error('请选择模型');
   }
 
@@ -195,17 +205,19 @@ async function sendToLLM(config, messages) {
   if (provider === 'custom') {
     endpoint = customEndpoint;
     if (!endpoint) {
+      console.error('[DEBUG] No custom endpoint');
       throw new Error('请填写自定义 API 端点');
     }
   } else {
     endpoint = PROVIDERS[provider].endpoint;
   }
+  console.log('[DEBUG] Endpoint:', endpoint);
 
   // Build request body for OpenAI-compatible API
   const body = {
     model: model,
     messages: messages,
-    stream: false
+    stream: true
   };
 
   // Add max_tokens for providers that require it
@@ -213,6 +225,7 @@ async function sendToLLM(config, messages) {
     body.max_tokens = 1024;
   }
 
+  console.log('[DEBUG] Sending fetch request...');
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -221,6 +234,7 @@ async function sendToLLM(config, messages) {
     },
     body: JSON.stringify(body)
   });
+  console.log('[DEBUG] Response status:', response.status);
 
   if (!response.ok) {
     let errorMsg = `API error: ${response.status}`;
@@ -228,18 +242,96 @@ async function sendToLLM(config, messages) {
       const errorData = await response.json();
       errorMsg = errorData.error?.message || errorData.message || errorMsg;
     } catch (e) {}
-    throw new Error(errorMsg);
+    console.error('[DEBUG] Response not ok:', errorMsg);
+    // Send error to popup
+    chrome.runtime.sendMessage({
+      type: 'STREAM_ERROR',
+      error: errorMsg,
+      senderTabId
+    }).catch(e => console.error('[DEBUG] Failed to send STREAM_ERROR:', e));
+    return { error: errorMsg };
   }
 
-  const data = await response.json();
+  // Handle streaming response
+  console.log('[DEBUG] Starting to read stream...');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullContent = '';
+  let messageId = Date.now().toString();
 
-  // Parse response - OpenAI compatible format
-  if (data.choices && data.choices[0]?.message?.content) {
-    return {
-      content: data.choices[0].message.content,
-      id: data.id || Date.now().toString()
-    };
+  // Send initial "start" event
+  console.log('[DEBUG] Sending STREAM_START, senderTabId:', senderTabId);
+  setTimeout(() => {
+    chrome.runtime.sendMessage({
+      type: 'STREAM_START',
+      messageId,
+      senderTabId
+    }).catch(e => console.error('[DEBUG] Failed to send STREAM_START:', e));
+  }, 0);
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      console.log('[DEBUG] Received chunk, length:', chunk.length, 'data:', chunk.substring(0, 100));
+      buffer += chunk;
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') {
+            console.log('[DEBUG] Received [DONE]');
+            // Send final chunk
+            setTimeout(() => {
+              chrome.runtime.sendMessage({
+                type: 'STREAM_CHUNK',
+                messageId,
+                content: '',
+                done: true,
+                senderTabId
+              }).catch(e => console.error('[DEBUG] Failed to send final STREAM_CHUNK:', e));
+            }, 0);
+            continue;
+          }
+          try {
+            const parsed = JSON.parse(data);
+            const content = parsed.choices?.[0]?.delta?.content || '';
+            if (content) {
+              fullContent += content;
+              console.log('[DEBUG] Sending chunk, fullContent length:', fullContent.length);
+              // Send each chunk with setTimeout to allow message delivery during stream
+              const chunkContent = fullContent;
+              const chunkMessageId = messageId;
+              const chunkSenderTabId = senderTabId;
+              setTimeout(() => {
+                chrome.runtime.sendMessage({
+                  type: 'STREAM_CHUNK',
+                  messageId: chunkMessageId,
+                  content: chunkContent,
+                  done: false,
+                  senderTabId: chunkSenderTabId
+                }).catch(e => console.error('[DEBUG] Failed to send STREAM_CHUNK:', e));
+              }, 0);
+            }
+            // Note: keep using original messageId (timestamp), don't use API's id
+          } catch (e) {
+            // Skip invalid JSON
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
   }
+  console.log('[DEBUG] Stream complete, total content length:', fullContent.length);
 
-  throw new Error('无法解析 API 响应');
+  return {
+    content: fullContent,
+    id: messageId
+  };
 }

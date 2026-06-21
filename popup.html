@@ -474,6 +474,20 @@
       margin: 6px 0;
       color: #6B6B6B;
     }
+
+    .streaming-cursor {
+      display: inline-block;
+      animation: blink 1s step-end infinite;
+      color: #8B7355;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    .message.error {
+      color: white;
+    }
   </style>
 </head>
 <body>

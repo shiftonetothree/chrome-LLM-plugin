@@ -4,6 +4,9 @@ let conversationHistory = [];
 let isFetchingModels = false;
 let lastDebugInfo = { systemContent: '', userText: '' }; // Store last sent context
 let currentTabId = null; // Track current tab for conversation keying
+let streamingMessageId = null; // Track current streaming message
+let streamingMessageElement = null; // DOM element for streaming message
+let streamingContent = ''; // Accumulated streaming content
 
 // DOM Elements
 const chatContainer = document.getElementById('chatContainer');
@@ -242,6 +245,115 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
+// ============ Streaming Message Handling ============
+
+// Listen for streaming chunks from background.js
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log('[POPUP] Received message type:', request.type, 'senderTabId:', request.senderTabId, 'currentTabId:', currentTabId);
+
+  if (request.type === 'STREAM_START') {
+    // Ignore if not for this tab
+    if (request.senderTabId !== currentTabId) {
+      console.log('[POPUP] STREAM_START ignored - tab mismatch');
+      return;
+    }
+
+    console.log('[POPUP] STREAM_START received, messageId:', request.messageId);
+    streamingMessageId = request.messageId;
+    streamingContent = ''; // Reset accumulated content
+    // Create placeholder message element
+    streamingMessageElement = document.createElement('div');
+    streamingMessageElement.className = 'message assistant streaming';
+    // Apply current font size BEFORE setting innerHTML
+    const currentFontSize = fontSizeSlider?.value || 12;
+    streamingMessageElement.style.fontSize = currentFontSize + 'px';
+    streamingMessageElement.innerHTML = '<span class="streaming-cursor">▊</span>';
+    chatContainer.appendChild(streamingMessageElement);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    sendResponse({ received: true });
+    return true;
+  }
+
+  if (request.type === 'STREAM_CHUNK') {
+    // Ignore if not for this tab or different message
+    if (request.senderTabId !== currentTabId) {
+      console.log('[POPUP] STREAM_CHUNK ignored - tab mismatch');
+      return;
+    }
+    if (request.messageId !== streamingMessageId) {
+      console.log('[POPUP] STREAM_CHUNK ignored - messageId mismatch', request.messageId, 'vs', streamingMessageId);
+      return;
+    }
+
+    const content = request.content || '';
+    console.log('[POPUP] STREAM_CHUNK received, done:', request.done, 'content length:', content.length);
+
+    if (request.done) {
+      // Stream complete - content is empty, use streamingContent
+      if (streamingMessageElement) {
+        const currentFontSize = fontSizeSlider?.value || 12;
+        console.log('[POPUP] Stream done, streamingContent length:', streamingContent.length);
+
+        // Use streamingContent which has the final accumulated content
+        streamingMessageElement.textContent = streamingContent;
+        streamingMessageElement.style.fontSize = currentFontSize + 'px';
+        streamingMessageElement.classList.remove('streaming');
+        streamingMessageElement = null;
+        streamingMessageId = null;
+
+        // Add to conversation history
+        conversationHistory.push({ role: 'assistant', content: streamingContent });
+        saveConversation();
+        streamingContent = ''; // Reset for next stream
+        statusEl.textContent = '就绪';
+        showLoading(false);
+        sendBtn.disabled = false;
+        userInput.focus();
+      }
+    } else {
+      // background.js sends accumulated fullContent, use it directly for display
+      streamingContent = content;
+
+      // Update streaming content
+      if (streamingMessageElement) {
+        const currentFontSize = fontSizeSlider?.value || 12;
+        streamingMessageElement.textContent = content;
+        streamingMessageElement.style.fontSize = currentFontSize + 'px';
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      }
+    }
+    sendResponse({ received: true });
+    return true;
+  }
+
+  if (request.type === 'STREAM_ERROR') {
+    // Ignore if not for this tab
+    if (request.senderTabId !== currentTabId) {
+      console.log('[POPUP] STREAM_ERROR ignored - tab mismatch');
+      return;
+    }
+
+    console.log('[POPUP] STREAM_ERROR received:', request.error);
+    if (streamingMessageElement) {
+      const currentFontSize = fontSizeSlider?.value || 12;
+      streamingMessageElement.innerHTML = `<span class="error">错误: ${request.error || '未知错误'}</span>`;
+      streamingMessageElement.style.fontSize = currentFontSize + 'px';
+      streamingMessageElement.classList.remove('streaming');
+      streamingMessageElement = null;
+    }
+    streamingMessageId = null;
+    streamingContent = ''; // Reset accumulated content
+    conversationHistory.pop(); // Remove the user message since we failed
+    saveConversation();
+    statusEl.textContent = '就绪';
+    showLoading(false);
+    sendBtn.disabled = false;
+    userInput.focus();
+    sendResponse({ received: true });
+    return true;
+  }
+});
+
 // Listen for tab switches to update context and conversation
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   const { tabId, windowId } = activeInfo;
@@ -395,18 +507,22 @@ async function sendMessage() {
     const actualModel = model || (provider === 'custom' ? 'custom-model' : '');
     const config = { provider, apiKey, model: actualModel, customEndpoint };
 
-    const response = await chrome.runtime.sendMessage({
+    // Send request - for streaming, we don't wait for response here
+    // The streaming chunks will come back via chrome.runtime.onMessage
+    chrome.runtime.sendMessage({
       type: 'SEND_TO_AI',
       config,
-      messages
+      messages,
+      senderTabId: currentTabId
+    }).catch(error => {
+      addMessage('error', `错误: ${error.message}`);
+      showLoading(false);
+      sendBtn.disabled = false;
+      userInput.focus();
+      conversationHistory.pop();
+      saveConversation();
+      statusEl.textContent = '就绪';
     });
-
-    if (response.error) throw new Error(response.error);
-
-    addMessage('assistant', response.content);
-    conversationHistory.push({ role: 'assistant', content: response.content });
-    await saveConversation();
-    statusEl.textContent = '就绪';
 
   } catch (error) {
     addMessage('error', `错误: ${error.message}`);
@@ -414,9 +530,7 @@ async function sendMessage() {
     await saveConversation();
     statusEl.textContent = '就绪';
   } finally {
-    showLoading(false);
-    sendBtn.disabled = false;
-    userInput.focus();
+    // Don't hide loading here - wait for stream to complete
   }
 }
 
@@ -424,12 +538,21 @@ async function sendMessage() {
 function addMessage(role, content) {
   const msg = document.createElement('div');
   msg.className = `message ${role}`;
-  if (role === 'assistant' && typeof marked !== 'undefined') {
-    msg.innerHTML = marked.parse(content);
+  const fontSize = (fontSizeSlider?.value || 12) + 'px';
+
+  if (role === 'assistant' && typeof marked !== 'undefined' && content) {
+    const parsed = marked.parse(content);
+    // Only use parsed content if it's not empty
+    if (parsed && parsed.trim()) {
+      msg.innerHTML = parsed;
+    } else {
+      msg.textContent = content;
+    }
   } else {
-    msg.textContent = content;
+    msg.textContent = content || '';
   }
-  msg.style.fontSize = (fontSizeSlider?.value || 12) + 'px';
+
+  msg.style.fontSize = fontSize;
   chatContainer.appendChild(msg);
   chatContainer.scrollTop = chatContainer.scrollHeight;
 }
