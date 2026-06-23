@@ -71,36 +71,39 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  // Return the last known active content tab for the current window
+  // Return the active content tab for the current window
   if (request.type === 'GET_ACTIVE_CONTENT_TAB') {
     const windowId = request.windowId;
 
-    // Fallback: find the first non-extension tab in this window
-    chrome.tabs.query({ windowId }, (tabs) => {
-      if (tabs && tabs.length > 0) {
-        // Prefer the tab that was most recently activated (tracked), otherwise pick the first non-extension tab
-        const tracked = lastActiveContentTab[windowId];
-        let targetTab = null;
-
-        if (tracked) {
-          targetTab = tabs.find(t => t.id === tracked);
+    // First, try to get the currently active tab in this window
+    chrome.tabs.query({ active: true, windowId: windowId }, (activeTabs) => {
+      if (activeTabs && activeTabs.length > 0) {
+        const activeTab = activeTabs[0];
+        // If the active tab is a content tab (not extension), use it directly
+        if (activeTab.url && !activeTab.url.startsWith('chrome-extension://') && !activeTab.url.startsWith('chrome://')) {
+          lastActiveContentTab[windowId] = activeTab.id;
+          sendResponse({ tabId: activeTab.id });
+          return;
         }
-        if (!targetTab) {
-          // Pick the first non-extension, non-chrome tab (the actual content page)
-          targetTab = tabs.find(t =>
+      }
+
+      // Fallback: find the first non-extension tab in this window (e.g., when sidepanel is active)
+      chrome.tabs.query({ windowId: windowId }, (tabs) => {
+        if (tabs && tabs.length > 0) {
+          const targetTab = tabs.find(t =>
             t.url && !t.url.startsWith('chrome-extension://') && !t.url.startsWith('chrome://')
           );
-        }
 
-        if (targetTab) {
-          lastActiveContentTab[windowId] = targetTab.id;
-          sendResponse({ tabId: targetTab.id });
+          if (targetTab) {
+            lastActiveContentTab[windowId] = targetTab.id;
+            sendResponse({ tabId: targetTab.id });
+          } else {
+            sendResponse({ tabId: null });
+          }
         } else {
           sendResponse({ tabId: null });
         }
-      } else {
-        sendResponse({ tabId: null });
-      }
+      });
     });
     return true;
   }
