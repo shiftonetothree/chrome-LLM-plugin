@@ -182,6 +182,33 @@ function buildSystemContent() {
     systemContent += `Page Title: ${pageContext.title}\n`;
     systemContent += `Page URL: ${pageContext.url}\n\n`;
     systemContent += `Page Content:\n${pageContext.text}\n\n`;
+
+    // Add subtitles if available
+    if (pageContext.subtitles && pageContext.subtitles.raw) {
+      const formattedSubtitles = pageContext.subtitles.raw.map(item => {
+        const fromSec = item.from || 0;
+        const min = Math.floor(fromSec / 60);
+        const sec = Math.floor(fromSec % 60);
+        const timestamp = `${min}:${sec.toString().padStart(2, '0')}`;
+        const text = (item.content || '').replace(/<[^>]+>/g, '').trim();
+        return `[${timestamp}] ${text}`;
+      }).join('\n');
+      systemContent += `=== Subtitles ===\n${formattedSubtitles}\n\n`;
+    }
+
+    // Add comments if available
+    if (pageContext.comments && pageContext.comments.length > 0) {
+      const commentsStr = pageContext.comments
+        .map(c => {
+          const prefix = c.isReply ? '[Reply] ' : '[Comment] ';
+          const userPart = c.user ? c.user + ': ' : '';
+          const timePart = c.time ? ` (${c.time})` : '';
+          return prefix + userPart + c.text + timePart;
+        })
+        .join('\n');
+      systemContent += `=== Comments ===\n${commentsStr}\n\n`;
+    }
+
     systemContent += `Please answer the user's questions based on this content. Be helpful and concise.`;
   }
   return systemContent;

@@ -3,8 +3,14 @@
   // Listen for messages from popup/background
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.type === 'GET_PAGE_CONTENT') {
-      const content = extractPageContent();
-      sendResponse({ content });
+      // extractPageContent is async, so we need to handle it properly
+      extractPageContent().then(content => {
+        sendResponse({ content });
+      }).catch(error => {
+        console.error('[AI Browser] Error extracting page content:', error);
+        sendResponse({ content: null, error: error.message });
+      });
+      return true; // Keep message channel open for async response
     }
     return true;
   });
@@ -50,200 +56,290 @@
     return text;
   }
 
-  // ========== Bilibili Comment Extraction ==========
+  // ========== Bilibili AI Subtitle Extraction ==========
 
-  function extractBilibiliComments() {
-    const comments = [];
+// Extract bvid from URL
+function extractBvidFromUrl(url) {
+  const match = url.match(/bilibili\.com\/video\/(BV[a-zA-Z0-9]+)/i);
+  return match ? match[1] : null;
+}
 
-    // Method 1: Find all comment thread renderers and extract properly
-    const threadRenderers = document.querySelectorAll('bili-comment-thread-renderer');
+// Get video info (including cid) from Bilibili API
+async function getVideoInfo(bvid) {
+  const apiUrl = `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`;
 
-    for (const thread of threadRenderers) {
-      if (!thread.shadowRoot) continue;
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      credentials: 'include', // Include cookies from the page context
+    });
 
-      // Extract main comment
-      const commentRenderer = thread.shadowRoot.querySelector('bili-comment-renderer');
-      if (commentRenderer && commentRenderer.shadowRoot) {
-        const comment = extractMainComment(commentRenderer);
-        if (comment) comments.push(comment);
-      }
+    if (!response.ok) {
+      console.error('[AI Browser] Failed to get video info:', response.status);
+      return null;
+    }
 
-      // Extract replies
-      const repliesRenderer = thread.shadowRoot.querySelector('bili-comment-replies-renderer');
-      if (repliesRenderer && repliesRenderer.shadowRoot) {
-        const replyRenderers = repliesRenderer.shadowRoot.querySelectorAll('bili-comment-reply-renderer');
-        for (const reply of replyRenderers) {
-          if (reply.shadowRoot) {
-            const replyComment = extractReplyComment(reply);
-            if (replyComment) comments.push(replyComment);
+    const data = await response.json();
+    if (data.code === 0 && data.data) {
+      return data.data;
+    }
+    console.error('[AI Browser] Video info API error:', data.message);
+    return null;
+  } catch (error) {
+    console.error('[AI Browser] Error getting video info:', error);
+    return null;
+  }
+}
+
+// Get subtitle info from Bilibili player API
+async function getSubtitleInfo(bvid, cid) {
+  // Try the Wbi API endpoint
+  const apiUrl = `https://api.bilibili.com/x/player/wbi/v2?bvid=${bvid}&cid=${cid}&isGaiaAvoided=false`;
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      credentials: 'include', // Include cookies from the page context
+    });
+
+    if (!response.ok) {
+      console.error('[AI Browser] Failed to get subtitle info:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    if (data.code === 0 && data.data) {
+      return data.data.subtitle;
+    }
+    console.error('[AI Browser] Subtitle info API error:', data.message);
+    return null;
+  } catch (error) {
+    console.error('[AI Browser] Error getting subtitle info:', error);
+    return null;
+  }
+}
+
+// Download and parse subtitle content
+async function downloadSubtitle(subtitleUrl) {
+  // Handle relative URLs
+  if (subtitleUrl.startsWith('//')) {
+    subtitleUrl = 'https:' + subtitleUrl;
+  }
+
+  try {
+    const response = await fetch(subtitleUrl, {
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      console.error('[AI Browser] Failed to download subtitle:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    // Subtitle body is in data.body array
+    const body = data.body || [];
+
+    if (body.length === 0) {
+      console.log('[AI Browser] Subtitle body is empty');
+      return null;
+    }
+
+    return body;
+  } catch (error) {
+    console.error('[AI Browser] Error downloading subtitle:', error);
+    return null;
+  }
+}
+
+// Main function to extract Bilibili AI subtitles
+async function extractBilibiliSubtitle() {
+  const url = window.location.href;
+
+  // Extract bvid from URL
+  const bvid = extractBvidFromUrl(url);
+  if (!bvid) {
+    console.log('[AI Browser] Could not extract bvid from URL:', url);
+    return null;
+  }
+  console.log('[AI Browser] Extracted bvid:', bvid);
+
+  // Get video info to find cid
+  const videoInfo = await getVideoInfo(bvid);
+  if (!videoInfo) {
+    console.error('[AI Browser] Could not get video info');
+    return null;
+  }
+
+  // Get first cid (for multi-part videos, get the current part)
+  const pages = videoInfo.pages || [];
+  let cid = videoInfo.cid;
+
+  // If URL has p parameter, try to find the matching cid
+  const pMatch = url.match(/[?&]p=(\d+)/);
+  if (pMatch && pages.length > 0) {
+    const targetPage = parseInt(pMatch[1], 10) - 1;
+    if (pages[targetPage]) {
+      cid = pages[targetPage].cid;
+    }
+  } else if (pages.length > 0) {
+    cid = pages[0].cid;
+  }
+
+  if (!cid) {
+    console.error('[AI Browser] Could not find cid');
+    return null;
+  }
+  console.log('[AI Browser] Using cid:', cid);
+
+  // Get subtitle info from player API
+  const subtitleInfo = await getSubtitleInfo(bvid, cid);
+  if (!subtitleInfo) {
+    console.log('[AI Browser] No subtitle info returned');
+    return null;
+  }
+
+  // Look for any available subtitle (prefer AI subtitles, fall back to first subtitle)
+  const subtitles = subtitleInfo.subtitles || [];
+  let targetSubtitle = null;
+
+  // Prefer AI subtitle (lan === 'ai-zh')
+  for (const sub of subtitles) {
+    if (sub.lan === 'ai-zh' && sub.subtitle_url) {
+      targetSubtitle = sub;
+      break;
+    }
+  }
+
+  // Fallback: use the first available subtitle
+  if (!targetSubtitle && subtitles.length > 0 && subtitles[0].subtitle_url) {
+    targetSubtitle = subtitles[0];
+  }
+
+  // Fallback: check if ai_subtitle exists directly (some API versions)
+  if (!targetSubtitle && subtitleInfo.ai_subtitle && subtitleInfo.ai_subtitle.subtitle_url) {
+    targetSubtitle = subtitleInfo.ai_subtitle;
+  }
+
+  if (!targetSubtitle || !targetSubtitle.subtitle_url) {
+    console.log('[AI Browser] No subtitle available for this video');
+    return null;
+  }
+
+  console.log('[AI Browser] Found subtitle URL:', targetSubtitle.subtitle_url, '(', targetSubtitle.lan_doc || targetSubtitle.lan, ')');
+
+  // Download and parse subtitle
+  const subtitleBody = await downloadSubtitle(targetSubtitle.subtitle_url);
+  if (!subtitleBody || subtitleBody.length === 0) {
+    console.error('[AI Browser] Failed to download subtitle content');
+    return null;
+  }
+
+  console.log('[AI Browser] Extracted', subtitleBody.length, 'subtitle lines');
+
+  return {
+    raw: subtitleBody,
+    count: subtitleBody.length
+  };
+}
+
+// ========== Bilibili Comment Extraction ==========
+
+// Fetch comments from Bilibili reply API
+async function fetchBilibiliComments(aid) {
+  if (!aid) {
+    console.log('[AI Browser] Could not get aid for comments');
+    return null;
+  }
+
+  const wts = Math.floor(Date.now() / 1000);
+  const apiUrl = `https://api.bilibili.com/x/v2/reply/wbi/main?oid=${aid}&type=1&mode=3&pagination_str=%7B%22offset%22:%22%22%7D&plat=1`;
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      console.error('[AI Browser] Failed to fetch comments:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    if (data.code !== 0 || !data.data) {
+      console.error('[AI Browser] Comment API error:', data.message);
+      return null;
+    }
+
+    return data.data;
+  } catch (error) {
+    console.error('[AI Browser] Error fetching comments:', error);
+    return null;
+  }
+}
+
+// Parse comment item to extract user, text, time
+function parseCommentItem(item) {
+  const user = item.member?.uname || '';
+  const text = item.content?.message || '';
+  const ctime = item.ctime ? new Date(item.ctime * 1000).toLocaleString('zh-CN') : '';
+
+  return {
+    user,
+    text,
+    time: ctime,
+    like: item.like || 0,
+    isReply: item.root !== 0
+  };
+}
+
+// Extract Bilibili comments via API
+async function extractBilibiliComments() {
+  const url = window.location.href;
+  const bvid = extractBvidFromUrl(url);
+  if (!bvid) {
+    console.log('[AI Browser] Could not extract bvid from URL:', url);
+    return [];
+  }
+
+  // Get video info to get aid
+  const videoInfo = await getVideoInfo(bvid);
+  if (!videoInfo || !videoInfo.aid) {
+    console.log('[AI Browser] Could not get video info or aid');
+    return [];
+  }
+
+  const aid = videoInfo.aid;
+  console.log('[AI Browser] Got aid:', aid);
+
+  const data = await fetchBilibiliComments(aid);
+  if (!data || !data.replies) {
+    console.log('[AI Browser] No comments returned');
+    return [];
+  }
+
+  const comments = [];
+
+  // Process main comments and their replies
+  for (const reply of data.replies) {
+    if (reply.member && reply.content) {
+      comments.push(parseCommentItem(reply));
+
+      // Process nested replies
+      if (reply.replies && Array.isArray(reply.replies)) {
+        for (const nestedReply of reply.replies) {
+          if (nestedReply.member && nestedReply.content) {
+            comments.push(parseCommentItem(nestedReply));
           }
         }
       }
     }
-
-    // Method 2: Walk all shadow hosts and look for comment content patterns
-    // This catches comments that might be in different component structures
-    const allShadowHosts = document.querySelectorAll('*');
-    for (const host of allShadowHosts) {
-      if (!host.shadowRoot || host.shadowRoot.mode !== 'open') continue;
-
-      // Look for the comment content pattern: #contents inside a rich-text component
-      const richTextComponents = host.shadowRoot.querySelectorAll('bili-rich-text');
-      for (const richText of richTextComponents) {
-        if (!richText.shadowRoot) continue;
-
-        // Get #contents or the actual paragraph content
-        const contents = richText.shadowRoot.querySelector('#contents');
-        if (contents) {
-          const text = contents.textContent?.trim() || '';
-          if (text && text.length > 5 && !text.includes('animation') && !text.includes('@font-face')) {
-            // Try to find associated user name
-            let user = '';
-            let time = '';
-
-            // Look for user-info in parent hierarchy
-            const parentRoot = richText.getRootNode();
-            if (parentRoot) {
-              const userInfo = parentRoot.querySelector('#user-name');
-              if (userInfo) {
-                user = userInfo.textContent?.trim() || '';
-              }
-              const actions = parentRoot.querySelector('bili-comment-action-buttons-renderer');
-              if (actions && actions.shadowRoot) {
-                const pubdate = actions.shadowRoot.querySelector('#pubdate');
-                if (pubdate) {
-                  time = pubdate.textContent?.trim() || '';
-                }
-              }
-            }
-
-            // Avoid duplicates
-            const exists = comments.some(c => c.text === text);
-            if (!exists) {
-              comments.push({ user, text, time, isReply: false });
-            }
-          }
-        }
-      }
-    }
-
-    return comments;
   }
 
-  // Extract main comment from bili-comment-renderer
-  function extractMainComment(renderer) {
-    if (!renderer.shadowRoot) return null;
-
-    let user = '';
-    let text = '';
-    let time = '';
-
-    // User name: #main > #header > bili-comment-user-info > shadowRoot > #user-name > a
-    const userInfo = renderer.shadowRoot.querySelector('bili-comment-user-info');
-    if (userInfo && userInfo.shadowRoot) {
-      const userName = userInfo.shadowRoot.querySelector('#user-name');
-      if (userName) {
-        user = userName.textContent?.trim() || '';
-        // Also check for link inside
-        const link = userName.querySelector('a');
-        if (link) {
-          user = link.textContent?.trim() || user;
-        }
-      }
-    }
-
-    // Comment text: #content > bili-rich-text > shadowRoot > #contents > p
-    const contentDiv = renderer.shadowRoot.querySelector('#content');
-    if (contentDiv) {
-      const richText = contentDiv.querySelector('bili-rich-text');
-      if (richText && richText.shadowRoot) {
-        // Get #contents specifically
-        const contents = richText.shadowRoot.querySelector('#contents');
-        if (contents) {
-          text = contents.textContent?.trim() || '';
-        } else {
-          // Fallback: get all text but filter out CSS
-          const allText = richText.shadowRoot.textContent || '';
-          // Filter out CSS-like content
-          text = allText.split(/[{}]/)[0]?.trim() || allText;
-          text = text.replace(/@[a-z-]+ \{[^}]*\}/gi, '').trim();
-        }
-      }
-      if (!text) {
-        text = contentDiv.textContent?.trim() || '';
-      }
-    }
-
-    // Time: bili-comment-action-buttons-renderer > shadowRoot > #pubdate
-    const actions = renderer.shadowRoot.querySelector('bili-comment-action-buttons-renderer');
-    if (actions && actions.shadowRoot) {
-      const pubdate = actions.shadowRoot.querySelector('#pubdate');
-      if (pubdate) {
-        time = pubdate.textContent?.trim() || '';
-      }
-    }
-
-    // Clean text - remove emoji alt text and excessive whitespace
-    if (text) {
-      text = text.replace(/\s+/g, ' ').trim();
-    }
-
-    if (text && text.length > 2) {
-      return { user, text, time, isReply: false };
-    }
-    return null;
-  }
-
-  // Extract reply comment from bili-comment-reply-renderer
-  function extractReplyComment(reply) {
-    if (!reply.shadowRoot) return null;
-
-    let user = '';
-    let text = '';
-    let time = '';
-
-    // User name
-    const userInfo = reply.shadowRoot.querySelector('bili-comment-user-info');
-    if (userInfo && userInfo.shadowRoot) {
-      const userName = userInfo.shadowRoot.querySelector('#user-name');
-      if (userName) {
-        user = userName.textContent?.trim() || '';
-        const link = userName.querySelector('a');
-        if (link) {
-          user = link.textContent?.trim() || user;
-        }
-      }
-    }
-
-    // Reply text
-    const richText = reply.shadowRoot.querySelector('bili-rich-text');
-    if (richText && richText.shadowRoot) {
-      const contents = richText.shadowRoot.querySelector('#contents');
-      if (contents) {
-        text = contents.textContent?.trim() || '';
-      } else {
-        text = richText.shadowRoot.textContent?.trim() || '';
-      }
-    }
-
-    // Time
-    const actions = reply.shadowRoot.querySelector('bili-comment-action-buttons-renderer');
-    if (actions && actions.shadowRoot) {
-      const pubdate = actions.shadowRoot.querySelector('#pubdate');
-      if (pubdate) {
-        time = pubdate.textContent?.trim() || '';
-      }
-    }
-
-    if (text) {
-      text = text.replace(/\s+/g, ' ').trim();
-    }
-
-    if (text && text.length > 2) {
-      return { user, text, time, isReply: true };
-    }
-    return null;
-  }
+  console.log('[AI Browser] Extracted', comments.length, 'comments');
+  return comments;
+}
 
   // ========== Generic Content Extraction ==========
 
@@ -303,12 +399,13 @@
     return combined;
   }
 
-  function extractPageContent() {
+  async function extractPageContent() {
     const result = {
       title: document.title || '',
       url: window.location.href || '',
       text: '',
-      comments: []
+      comments: [],
+      subtitles: null
     };
 
     // Check if on Bilibili
@@ -317,23 +414,16 @@
     // Extract all visible text (generic)
     result.text = extractAllVisibleText();
 
-    // Extract Bilibili comments specifically
+    // Extract Bilibili comments (returned separately, not appended to text)
     if (isBilibili) {
-      const comments = extractBilibiliComments();
+      const comments = await extractBilibiliComments();
       result.comments = comments;
 
-      // Append comments to main text for context
-      if (comments.length > 0) {
-        const commentsStr = comments
-          .map(c => {
-            const prefix = c.isReply ? '[回复] ' : '[评论] ';
-            const userPart = c.user ? c.user + ': ' : '';
-            const timePart = c.time ? ` (${c.time})` : '';
-            return prefix + userPart + c.text + timePart;
-          })
-          .join('\n');
-
-        result.text += '\n\n=== 评论区 (Comments) ===\n' + commentsStr;
+      // Extract Bilibili subtitles
+      const subtitleData = await extractBilibiliSubtitle();
+      if (subtitleData) {
+        result.subtitles = subtitleData;
+        console.log('[AI Browser] Extracted', subtitleData.count, 'subtitles');
       }
     }
 
