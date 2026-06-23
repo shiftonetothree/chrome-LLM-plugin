@@ -22,6 +22,8 @@ const modelSelect = document.getElementById('modelSelect');
 const customEndpointRow = document.getElementById('customEndpointRow');
 const customEndpointInput = document.getElementById('customEndpoint');
 const refreshModelsBtn = document.getElementById('refreshModelsBtn');
+const configToggleRow = document.getElementById('configToggleRow');
+const toggleConfigBtn = document.getElementById('toggleConfigBtn');
 
 // Provider presets
 const PROVIDERS = {
@@ -72,6 +74,9 @@ async function loadConfig() {
 
   customEndpointRow.classList.toggle('show', providerSelect.value === 'custom');
   updateModelSelectState();
+
+  // Initially show config rows
+  showConfig();
 
   if (result.provider && result.apiKey) {
     fetchModels();
@@ -156,12 +161,16 @@ async function fetchModels() {
 
     statusEl.textContent = '已加载 ' + (response.models?.length || 0) + ' 个模型';
     statusEl.classList.add('ready');
+    // Success - hide config rows after loading models
+    hideConfig();
 
   } catch (error) {
     console.error('Error fetching models:', error);
     statusEl.textContent = '获取模型失败';
     statusEl.classList.add('error');
-    modelSelect.innerHTML = '<option value="">-- 获取失败，手动输入 --</option>';
+    modelSelect.innerHTML = '<option value="">-- 获取失败 --</option>';
+    // Failure - show config rows so user can modify and retry
+    showConfig();
 
     setTimeout(() => {
       statusEl.classList.remove('error');
@@ -469,6 +478,26 @@ modelSelect.addEventListener('change', async () => {
 
 refreshModelsBtn.addEventListener('click', () => {
   fetchModels();
+});
+
+// Toggle config visibility
+// Show/Hide config functions
+function showConfig() {
+  configToggleRow.classList.add('show');
+  toggleConfigBtn.classList.add('active');
+}
+
+function hideConfig() {
+  configToggleRow.classList.remove('show');
+  toggleConfigBtn.classList.remove('active');
+}
+
+toggleConfigBtn.addEventListener('click', () => {
+  if (configToggleRow.classList.contains('show')) {
+    hideConfig();
+  } else {
+    showConfig();
+  }
 });
 
 // Fetch fresh page context from the current content tab

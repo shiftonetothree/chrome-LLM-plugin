@@ -226,6 +226,38 @@
       color: white;
     }
 
+    .toggle-config-btn {
+      padding: 4px 8px;
+      background: #C9BFA8;
+      border: none;
+      border-radius: 4px;
+      color: #5A5A5A;
+      font-size: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-right: 4px;
+    }
+
+    .toggle-config-btn:hover {
+      background: #8B7355;
+      color: white;
+    }
+
+    .toggle-config-btn.active {
+      background: #8B7355;
+      color: white;
+    }
+
+    .config-toggle-row {
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .config-toggle-row.show {
+      display: flex;
+    }
+
     .context-banner {
       background: #E8E2D6;
       padding: 6px 10px;
@@ -506,29 +538,32 @@
   </div>
 
   <div class="config-section">
-    <div class="config-row">
-      <label>Provider</label>
-      <select id="providerSelect">
-        <option value="">-- 选择提供商 --</option>
-        <option value="openai">OpenAI</option>
-        <option value="deepseek">DeepSeek</option>
-        <option value="siliconflow">SiliconFlow (硅基流动)</option>
-        <option value="ollama">Ollama (本地)</option>
-        <option value="custom">自定义 API</option>
-      </select>
-    </div>
+    <div class="config-toggle-row" id="configToggleRow">
+      <div class="config-row">
+        <label>Provider</label>
+        <select id="providerSelect">
+          <option value="">-- 选择提供商 --</option>
+          <option value="openai">OpenAI</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="siliconflow">SiliconFlow (硅基流动)</option>
+          <option value="ollama">Ollama (本地)</option>
+          <option value="custom">自定义 API</option>
+        </select>
+      </div>
 
-    <div class="config-row">
-      <label>API Key</label>
-      <input type="password" id="apiKey" placeholder="输入 API Key 或 Token">
-    </div>
+      <div class="config-row">
+        <label>API Key</label>
+        <input type="password" id="apiKey" placeholder="输入 API Key 或 Token">
+      </div>
 
-    <div class="config-row custom-endpoint" id="customEndpointRow">
-      <label>API 端点</label>
-      <input type="text" id="customEndpoint" placeholder="https://api.example.com/v1/chat/completions">
+      <div class="config-row custom-endpoint" id="customEndpointRow">
+        <label>API 端点</label>
+        <input type="text" id="customEndpoint" placeholder="https://api.example.com/v1/chat/completions">
+      </div>
     </div>
 
     <div class="model-row">
+      <button class="toggle-config-btn" id="toggleConfigBtn">⚙️</button>
       <label>Model</label>
       <select id="modelSelect" class="model-select" disabled>
         <option value="">-- 先填写配置 --</option>
