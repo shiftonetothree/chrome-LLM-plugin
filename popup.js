@@ -7,6 +7,7 @@ let currentTabId = null; // Track current tab for conversation keying
 let streamingMessageId = null; // Track current streaming message
 let streamingMessageElement = null; // DOM element for streaming message
 let streamingContent = ''; // Accumulated streaming content
+let isFirstChunkAfterStreamStart = false; // Flag for first chunk scrolling behavior
 
 // DOM Elements
 const chatContainer = document.getElementById('chatContainer');
@@ -297,6 +298,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     console.log('[POPUP] STREAM_START received, messageId:', request.messageId);
     streamingMessageId = request.messageId;
     streamingContent = ''; // Reset accumulated content
+    isFirstChunkAfterStreamStart = true; // Reset flag for first chunk
     // Create placeholder message element
     streamingMessageElement = document.createElement('div');
     streamingMessageElement.className = 'message assistant streaming';
@@ -341,6 +343,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         streamingMessageElement.classList.remove('streaming');
         streamingMessageElement = null;
         streamingMessageId = null;
+        isFirstChunkAfterStreamStart = false;
 
         // Add to conversation history
         conversationHistory.push({ role: 'assistant', content: streamingContent });
@@ -364,7 +367,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           streamingMessageElement.textContent = content;
         }
         streamingMessageElement.style.fontSize = currentFontSize + 'px';
-        chatContainer.scrollTop = chatContainer.scrollHeight;
+
+        // First chunk after stream start: always scroll to bottom
+        // Subsequent chunks: only scroll if user is already near bottom
+        if (isFirstChunkAfterStreamStart) {
+          chatContainer.scrollTop = chatContainer.scrollHeight;
+          isFirstChunkAfterStreamStart = false;
+        } else {
+          const threshold = 50; // pixels threshold to consider "at bottom"
+          const isAtBottom = chatContainer.scrollTop + chatContainer.clientHeight >= chatContainer.scrollHeight - threshold;
+          if (isAtBottom) {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+          }
+        }
       }
     }
     sendResponse({ received: true });
@@ -388,6 +403,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     streamingMessageId = null;
     streamingContent = ''; // Reset accumulated content
+    isFirstChunkAfterStreamStart = false; // Reset flag
     conversationHistory.pop(); // Remove the user message since we failed
     saveConversation();
     statusEl.textContent = '就绪';
