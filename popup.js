@@ -361,6 +361,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       // Update streaming content - render markdown while streaming
       if (streamingMessageElement) {
         const currentFontSize = fontSizeSlider?.value || 12;
+
+        // Check if user is at bottom BEFORE updating content
+        // First chunk after stream start: always scroll to bottom
+        // Subsequent chunks: only scroll if user is already near bottom
+        let shouldScrollToBottom;
+        if (isFirstChunkAfterStreamStart) {
+          shouldScrollToBottom = true;
+          isFirstChunkAfterStreamStart = false;
+        } else {
+          const threshold = 50; // pixels threshold to consider "at bottom"
+          shouldScrollToBottom = chatContainer.scrollTop + chatContainer.clientHeight >= chatContainer.scrollHeight - threshold;
+        }
+
+        // Update content first
         if (typeof marked !== 'undefined' && content) {
           streamingMessageElement.innerHTML = marked.parse(content) + '<span class="streaming-cursor">▊</span>';
         } else {
@@ -368,17 +382,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
         streamingMessageElement.style.fontSize = currentFontSize + 'px';
 
-        // First chunk after stream start: always scroll to bottom
-        // Subsequent chunks: only scroll if user is already near bottom
-        if (isFirstChunkAfterStreamStart) {
+        // Then scroll if needed
+        if (shouldScrollToBottom) {
           chatContainer.scrollTop = chatContainer.scrollHeight;
-          isFirstChunkAfterStreamStart = false;
-        } else {
-          const threshold = 50; // pixels threshold to consider "at bottom"
-          const isAtBottom = chatContainer.scrollTop + chatContainer.clientHeight >= chatContainer.scrollHeight - threshold;
-          if (isAtBottom) {
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-          }
         }
       }
     }
