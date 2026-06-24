@@ -2,7 +2,9 @@
 setlocal enabledelayedexpansion
 
 set "EXTNAME=ai-browser-assistant"
-set "VERSION=1.0.0"
+
+:: Read version from manifest.json
+for /f "delims=" %%a in ('powershell -Command "(Get-Content manifest.json -Raw | ConvertFrom-Json).version"') do set "VERSION=%%a"
 set "OUT=%EXTNAME%-%VERSION%.zip"
 set "PKGDIR=%EXTNAME%-%VERSION%"
 
