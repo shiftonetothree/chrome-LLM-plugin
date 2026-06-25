@@ -48,8 +48,6 @@ This extension relies entirely on third-party AI API services configured by you.
 
 ## Permissions
 
-- `activeTab`: Access the currently active tab to extract page content for AI context
-- `scripting`: Inject content extraction script into webpages
 - `storage`: Store your configuration and conversation history locally
 - `sidePanel`: Enable the side panel interface
 - Host permissions (`https://*/`, `http://*/`): Required to extract content from and communicate with the webpages you visit, as well as to reach your configured API endpoints
