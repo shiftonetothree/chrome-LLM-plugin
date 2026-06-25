@@ -427,9 +427,11 @@ async function extractBilibiliComments() {
       }
     }
 
+    const lengthLimit = 1000 * 500;
+
     // Limit to avoid token limits
-    if (result.text.length > 10000) {
-      result.text = result.text.substring(0, 10000) + '\n...[content truncated]';
+    if (result.text.length > lengthLimit) {
+      result.text = result.text.substring(0, lengthLimit) + '\n...[content truncated]';
     }
 
     return result;
