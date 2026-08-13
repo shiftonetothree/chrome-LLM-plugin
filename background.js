@@ -109,6 +109,26 @@ function setupContextMenu() {
 }
 setupContextMenu();
 
+// ===== Toolbar Action Behavior =====
+// In Chrome/Chromium browsers that support the sidePanel API, clicking the
+// toolbar icon opens the side panel by default.
+// In browsers without side panel support (e.g. Firefox), keep the normal
+// popup behavior.
+function setupActionBehavior() {
+  if (chrome.sidePanel && typeof chrome.sidePanel.setPanelBehavior === 'function') {
+    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+      .catch(err => console.warn('[Background] Failed to enable side panel on action click:', err));
+  } else {
+    // Fallback for browsers without side panel support: restore the popup.
+    try {
+      chrome.action.setPopup({ popup: 'popup.html' });
+    } catch (e) {
+      console.warn('[Background] Failed to set popup fallback:', e);
+    }
+  }
+}
+setupActionBehavior();
+
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== 'translate-paragraph') return;

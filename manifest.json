@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "狐狸学伴AI助手",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "browser_specific_settings": {
     "gecko": {
       "id": "{766bb7e2-0e5a-4e2e-bc4a-bd2fe3d43214}",
@@ -23,7 +23,6 @@
     "http://*/*"
   ],
   "action": {
-    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
