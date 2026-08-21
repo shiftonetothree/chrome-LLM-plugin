@@ -498,7 +498,7 @@ async function loadConfig() {
   const result = await chrome.storage.local.get(['provider', 'apiKey', 'model', 'customEndpoint', 'searchEngines']);
   if (result.provider) providerSelect.value = result.provider;
   if (result.apiKey) apiKeyInput.value = result.apiKey;
-  if (result.model) {}
+  if (result.model) { }
   if (result.customEndpoint) customEndpointInput.value = result.customEndpoint;
 
   if (result.searchEngines) {
@@ -667,6 +667,8 @@ function buildSystemContent() {
 
     systemContent += `Please answer the user's questions based on this content. Be helpful and concise.
 
+Page highlighting is available through the highlight_page_text tool. When your answer relies on one or more specific statements from the page, call highlight_page_text before giving the final answer. Pass 1-3 short passages (8-160 characters) copied verbatim from Page Content; do not summarize, translate, add labels, quotes, or markdown around them. Prefer a distinctive sentence or clause that appears exactly in Page Content. If the answer does not rely on a specific page statement, do not call it.
+
 You have access to web search tools (up to 3 uses total per response).
 
 Use web search when:
@@ -721,28 +723,49 @@ async function refreshPageContext() {
 }
 
 function buildSearchTools() {
-  if (!searchEngines) return [];
+  const HIGHLIGHT_PAGE_TEXT_TOOL = {
+    type: 'function',
+    // Not JavaScript keyword, but OpenAI-compatible API 
+    function: {
+      name: 'highlight_page_text',
+      description: 'Highlight passages from the current webpage that support the answer. Use only exact or near-exact text from the provided page content, maximum 3 passages.',
+      parameters: {
+        type: 'object',
+        properties: {
+          passages: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Short, distinctive passages copied from the current webpage.'
+          }
+        },
+        required: ['passages']
+      }
+    }
+  }
 
-  const tools = [];
+  const SEARCH_TOOL = {
+    type: 'function',
+    function: {
+      name: engine.toolName,
+      description: engine.toolDescription,
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'The search query. Be specific and use keywords for best results.'
+          }
+        },
+        required: ['query']
+      }
+    }
+  }
+
+  const tools = [HIGHLIGHT_PAGE_TEXT_TOOL];
+  if (!searchEngines) return tools;
   for (const [id, engine] of Object.entries(searchEngines)) {
     if (!enabledSearchEngines[id]) continue;
-    tools.push({
-      type: 'function',
-      function: {
-        name: engine.toolName,
-        description: engine.toolDescription,
-        parameters: {
-          type: 'object',
-          properties: {
-            query: {
-              type: 'string',
-              description: 'The search query. Be specific and use keywords for best results.'
-            }
-          },
-          required: ['query']
-        }
-      }
-    });
+    tools.push(SEARCH_TOOL);
   }
   return tools;
 }
@@ -827,7 +850,7 @@ function stopStream() {
   chrome.runtime.sendMessage({
     type: 'STOP_STREAM',
     senderTabId: activeTabId
-  }).catch(() => {});
+  }).catch(() => { });
 
   // Finalize locally
   if (activeStreamEl) {

@@ -19,6 +19,20 @@
       return true;
     }
 
+    if (request.type === 'HIGHLIGHT_PAGE_TEXT') {
+      const result = window.AIPageHighlighter
+        ? window.AIPageHighlighter.highlightText(request.passages, request.options)
+        : { success: false, matches: 0, passages: [] };
+      sendResponse(result);
+      return true;
+    }
+
+    if (request.type === 'CLEAR_PAGE_HIGHLIGHTS') {
+      if (window.AIPageHighlighter) window.AIPageHighlighter.clearHighlights();
+      sendResponse({ success: true });
+      return true;
+    }
+
     if (request.type === 'INSERT_TRANSLATION_PLACEHOLDER') {
       const placeholderId = insertTranslationPlaceholder();
       sendResponse({ placeholderId });

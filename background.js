@@ -90,6 +90,25 @@ const SEARCH_ENGINES = {
 // Default enabled search engines (Bing on by default for backward compatibility)
 const DEFAULT_ENABLED_ENGINES = { bing: true, google: false, baidu: false, wikipedia: false };
 
+const PAGE_HIGHLIGHT_TOOL = {
+  type: 'function',
+  function: {
+    name: 'highlight_page_text',
+    description: 'Highlight passages from the current webpage that support the answer. Use only exact or near-exact text from the provided page content, maximum 3 passages.',
+    parameters: {
+      type: 'object',
+      properties: {
+        passages: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Short, distinctive passages copied from the current webpage.'
+        }
+      },
+      required: ['passages']
+    }
+  }
+};
+
 // Track active stream AbortControllers keyed by senderTabId
 const activeStreams = {}; // senderTabId -> AbortController
 // Track active stream state so popup can reconnect after closing/reopening
@@ -352,6 +371,20 @@ function getEngineByToolName(toolName) {
     if (engine.toolName === toolName) return engine;
   }
   return null;
+}
+
+async function executeHighlightTool(args, senderTabId) {
+  const passages = Array.isArray(args.passages) ? args.passages.slice(0, 3) : [];
+  if (!senderTabId || passages.length === 0) {
+    return { success: false, matches: 0, passages: [] };
+  }
+  try {
+    return await chrome.tabs.sendMessage(senderTabId, {
+      type: 'HIGHLIGHT_PAGE_TEXT', passages, options: { maxMatches: 3 }
+    });
+  } catch (error) {
+    return { success: false, matches: 0, passages: [], error: error.message };
+  }
 }
 
 // Perform a web search by opening a search tab, extracting results, then closing it
@@ -853,8 +886,11 @@ async function processStreamResponse(response, endpoint, config, messages, tools
   if (hasToolCalls && Object.keys(toolCalls).length > 0) {
     console.log('[DEBUG] Detected tool calls:', Object.keys(toolCalls).length);
 
-    // Notify popup that we're searching
-    fullContent = fullContent + '\n\n🔍 *正在搜索网页...*';
+    // Notify popup that a tool is being executed
+    const hasHighlightCall = Object.values(toolCalls).some(call => call.name === 'highlight_page_text');
+    const hasSearchCall = Object.values(toolCalls).some(call => getEngineByToolName(call.name));
+    if (hasSearchCall) fullContent = fullContent + '\n\n🔍 *正在搜索网页...*';
+    else if (hasHighlightCall) fullContent = fullContent + '\n\n📌 *正在定位页面相关内容...*';
     if (streamSessions[senderTabId]) streamSessions[senderTabId].content = fullContent;
     chrome.runtime.sendMessage({
       type: 'STREAM_CHUNK',
@@ -869,6 +905,25 @@ async function processStreamResponse(response, endpoint, config, messages, tools
     const sortedCalls = Object.keys(toolCalls).sort().map(k => toolCalls[k]);
 
     for (const toolCall of sortedCalls) {
+      if (toolCall.name === 'highlight_page_text') {
+        try {
+          const result = await executeHighlightTool(JSON.parse(toolCall.arguments || '{}'), senderTabId);
+          toolResults.push({
+            tool_call_id: toolCall.id,
+            role: 'tool',
+            content: JSON.stringify(result)
+          });
+          const highlightMessage = result.matches
+            ? '📌 已在页面标记 ' + result.matches + ' 处相关内容'
+            : '📌 未找到可直接标记的原文（模型返回的片段可能不是页面原文）';
+          fullContent += '\n\n' + highlightMessage;
+          if (streamSessions[senderTabId]) streamSessions[senderTabId].content = fullContent;
+          chrome.runtime.sendMessage({ type: 'STREAM_CHUNK', messageId, content: fullContent, done: false, senderTabId }).catch(() => {});
+        } catch (e) {
+          toolResults.push({ tool_call_id: toolCall.id, role: 'tool', content: '页面高亮失败: ' + e.message });
+        }
+        continue;
+      }
       const engine = getEngineByToolName(toolCall.name);
       if (engine) {
         try {
@@ -1073,6 +1128,25 @@ async function processStreamResponse(response, endpoint, config, messages, tools
           // Execute each new tool call
           const sortedRoundCalls = Object.keys(roundToolCalls).sort().map(k => roundToolCalls[k]);
           for (const tc of sortedRoundCalls) {
+            if (tc.name === 'highlight_page_text') {
+              try {
+                const result = await executeHighlightTool(JSON.parse(tc.arguments || '{}'), senderTabId);
+                followUpMessages.push({
+                  tool_call_id: tc.id,
+                  role: 'tool',
+                  content: JSON.stringify(result)
+                });
+                const highlightMessage = result.matches
+                  ? '📌 已在页面标记 ' + result.matches + ' 处相关内容'
+                  : '📌 未找到可直接标记的原文（模型返回的片段可能不是页面原文）';
+                fullContent += '\n\n' + highlightMessage;
+                if (streamSessions[senderTabId]) streamSessions[senderTabId].content = fullContent;
+                chrome.runtime.sendMessage({ type: 'STREAM_CHUNK', messageId, content: fullContent, done: false, senderTabId }).catch(() => {});
+              } catch (e) {
+                followUpMessages.push({ tool_call_id: tc.id, role: 'tool', content: '页面高亮失败: ' + e.message });
+              }
+              continue;
+            }
             const engine = getEngineByToolName(tc.name);
             if (engine) {
               try {
