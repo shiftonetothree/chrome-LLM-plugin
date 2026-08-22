@@ -373,12 +373,18 @@ function getEngineByToolName(toolName) {
   return null;
 }
 
+/* 
+  this function will send a message to content script to highlight the text
+*/
 async function executeHighlightTool(args, senderTabId) {
   const passages = Array.isArray(args.passages) ? args.passages.slice(0, 3) : [];
   if (!senderTabId || passages.length === 0) {
     return { success: false, matches: 0, passages: [] };
   }
   try {
+    /* 
+      passages: Sentence array, contains the original text in the page
+    */
     return await chrome.tabs.sendMessage(senderTabId, {
       type: 'HIGHLIGHT_PAGE_TEXT', passages, options: { maxMatches: 3 }
     });
@@ -907,20 +913,44 @@ async function processStreamResponse(response, endpoint, config, messages, tools
     for (const toolCall of sortedCalls) {
       if (toolCall.name === 'highlight_page_text') {
         try {
-          const result = await executeHighlightTool(JSON.parse(toolCall.arguments || '{}'), senderTabId);
-          toolResults.push({
-            tool_call_id: toolCall.id,
+          const highlightToolArguments = JSON.parse(toolCall.arguments || '{}');
+          const highlightSenderTabId = senderTabId;
+          const highlightToolCallId = toolCall.id;
+          const highlightResult = await executeHighlightTool(
+            highlightToolArguments,
+            highlightSenderTabId
+          );
+
+          const highlightToolResultMessage = {
+            tool_call_id: highlightToolCallId,
             role: 'tool',
-            content: JSON.stringify(result)
-          });
-          const highlightMessage = result.matches
-            ? '📌 已在页面标记 ' + result.matches + ' 处相关内容'
+            content: JSON.stringify(highlightResult)
+          };
+          toolResults.push(highlightToolResultMessage);
+
+          const highlightMessage = highlightResult.matches
+            ? '📌 已在页面标记 ' + highlightResult.matches + ' 处相关内容'
             : '📌 未找到可直接标记的原文（模型返回的片段可能不是页面原文）';
           fullContent += '\n\n' + highlightMessage;
-          if (streamSessions[senderTabId]) streamSessions[senderTabId].content = fullContent;
-          chrome.runtime.sendMessage({ type: 'STREAM_CHUNK', messageId, content: fullContent, done: false, senderTabId }).catch(() => {});
+
+          const highlightStreamMessage = {
+            type: 'STREAM_CHUNK',
+            messageId,
+            content: fullContent,
+            done: false,
+            senderTabId: highlightSenderTabId
+          };
+          if (streamSessions[highlightSenderTabId]) {
+            streamSessions[highlightSenderTabId].content = fullContent;
+          }
+          chrome.runtime.sendMessage(highlightStreamMessage).catch(() => {});
         } catch (e) {
-          toolResults.push({ tool_call_id: toolCall.id, role: 'tool', content: '页面高亮失败: ' + e.message });
+          const highlightErrorMessage = {
+            tool_call_id: toolCall.id,
+            role: 'tool',
+            content: '页面高亮失败: ' + e.message
+          };
+          toolResults.push(highlightErrorMessage);
         }
         continue;
       }

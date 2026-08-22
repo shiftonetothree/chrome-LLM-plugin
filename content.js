@@ -19,6 +19,9 @@
       return true;
     }
 
+    /* 
+      When LLM decide use Highlightor, the background script will send a message to content script to highlight the text.
+    */
     if (request.type === 'HIGHLIGHT_PAGE_TEXT') {
       const result = window.AIPageHighlighter
         ? window.AIPageHighlighter.highlightText(request.passages, request.options)

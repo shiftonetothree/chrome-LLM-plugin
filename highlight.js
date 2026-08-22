@@ -1,3 +1,10 @@
+/* 
+  Description: A pages utils that used for highlighting text. Working on Tabs context.
+  Use it like this:
+  
+  AIPageHighlighter.highlightText(['passage1', 'passage2']);
+*/
+
 (function(global) {
   const STYLE_ID = 'ai-page-highlight-style';
   const MARK_CLASS = 'ai-page-highlight';
@@ -11,6 +18,15 @@
       .trim();
   }
 
+  /* 
+    The original LLM returns may contains extra formatting, like:
+    原文：xxx
+    引用：xxx
+    摘录：xxx
+    passage: xxx
+    quote: xxx
+    so we clean it here.
+  */
   function cleanPassage(text) {
     return String(text || '')
       .replace(/^\s*(?:原文|引用|摘录|passage|quote)\s*[:：]\s*/i, '')
@@ -120,18 +136,26 @@
     return true;
   }
 
+  /* 
+    passages receive param like these:
+    highlightText('网页中的一段文字');
+    highlightText(['第一段文字', '第二段文字']);
+  */
   function highlightText(passages, options = {}) {
+
     const wanted = (Array.isArray(passages) ? passages : [passages])
       .map(cleanPassage)
       .map(normalizeText)
       .filter(text => text.length >= (options.minLength || 8));
     if (!wanted.length || !document.body) return { success: false, matches: 0, passages: [] };
 
+    // clean last highlight 
     clearHighlights(document);
+    // keep css style to highlight is working
     ensureStyles();
     let nodes = collectTextNodes(document.body);
     const matched = [];
-    const maxMatches = options.maxMatches || 3;
+    const maxMatches = options.maxMatches || 5;
 
     for (const passage of wanted) {
       if (matched.length >= maxMatches) break;
