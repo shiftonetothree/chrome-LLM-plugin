@@ -1,5 +1,5 @@
 // Content script to extract ALL visible webpage text content
-(function() {
+(function () {
   // Listen for messages from popup/background
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.type === 'GET_PAGE_CONTENT') {
@@ -477,288 +477,288 @@
 
   // ========== Bilibili AI Subtitle Extraction ==========
 
-// Extract bvid from URL
-function extractBvidFromUrl(url) {
-  const match = url.match(/bilibili\.com\/video\/(BV[a-zA-Z0-9]+)/i);
-  return match ? match[1] : null;
-}
-
-// Get video info (including cid) from Bilibili API
-async function getVideoInfo(bvid) {
-  const apiUrl = `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`;
-
-  try {
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      credentials: 'include', // Include cookies from the page context
-    });
-
-    if (!response.ok) {
-      console.error('[AI Browser] Failed to get video info:', response.status);
-      return null;
-    }
-
-    const data = await response.json();
-    if (data.code === 0 && data.data) {
-      return data.data;
-    }
-    console.error('[AI Browser] Video info API error:', data.message);
-    return null;
-  } catch (error) {
-    console.error('[AI Browser] Error getting video info:', error);
-    return null;
-  }
-}
-
-// Get subtitle info from Bilibili player API
-async function getSubtitleInfo(bvid, cid) {
-  // Try the Wbi API endpoint
-  const apiUrl = `https://api.bilibili.com/x/player/wbi/v2?bvid=${bvid}&cid=${cid}&isGaiaAvoided=false`;
-
-  try {
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      credentials: 'include', // Include cookies from the page context
-    });
-
-    if (!response.ok) {
-      console.error('[AI Browser] Failed to get subtitle info:', response.status);
-      return null;
-    }
-
-    const data = await response.json();
-    if (data.code === 0 && data.data) {
-      return data.data.subtitle;
-    }
-    console.error('[AI Browser] Subtitle info API error:', data.message);
-    return null;
-  } catch (error) {
-    console.error('[AI Browser] Error getting subtitle info:', error);
-    return null;
-  }
-}
-
-// Download and parse subtitle content
-async function downloadSubtitle(subtitleUrl) {
-  // Handle relative URLs
-  if (subtitleUrl.startsWith('//')) {
-    subtitleUrl = 'https:' + subtitleUrl;
-  }
-
-  try {
-    const response = await fetch(subtitleUrl, {
-      method: 'GET',
-    });
-
-    if (!response.ok) {
-      console.error('[AI Browser] Failed to download subtitle:', response.status);
-      return null;
-    }
-
-    const data = await response.json();
-    // Subtitle body is in data.body array
-    const body = data.body || [];
-
-    if (body.length === 0) {
-      console.log('[AI Browser] Subtitle body is empty');
-      return null;
-    }
-
-    return body;
-  } catch (error) {
-    console.error('[AI Browser] Error downloading subtitle:', error);
-    return null;
-  }
-}
-
-// Main function to extract Bilibili AI subtitles
-async function extractBilibiliSubtitle() {
-  const url = window.location.href;
-
   // Extract bvid from URL
-  const bvid = extractBvidFromUrl(url);
-  if (!bvid) {
-    console.log('[AI Browser] Could not extract bvid from URL:', url);
-    return null;
-  }
-  console.log('[AI Browser] Extracted bvid:', bvid);
-
-  // Get video info to find cid
-  const videoInfo = await getVideoInfo(bvid);
-  if (!videoInfo) {
-    console.error('[AI Browser] Could not get video info');
-    return null;
+  function extractBvidFromUrl(url) {
+    const match = url.match(/bilibili\.com\/video\/(BV[a-zA-Z0-9]+)/i);
+    return match ? match[1] : null;
   }
 
-  // Get first cid (for multi-part videos, get the current part)
-  const pages = videoInfo.pages || [];
-  let cid = videoInfo.cid;
+  // Get video info (including cid) from Bilibili API
+  async function getVideoInfo(bvid) {
+    const apiUrl = `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`;
 
-  // If URL has p parameter, try to find the matching cid
-  const pMatch = url.match(/[?&]p=(\d+)/);
-  if (pMatch && pages.length > 0) {
-    const targetPage = parseInt(pMatch[1], 10) - 1;
-    if (pages[targetPage]) {
-      cid = pages[targetPage].cid;
-    }
-  } else if (pages.length > 0) {
-    cid = pages[0].cid;
-  }
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        credentials: 'include', // Include cookies from the page context
+      });
 
-  if (!cid) {
-    console.error('[AI Browser] Could not find cid');
-    return null;
-  }
-  console.log('[AI Browser] Using cid:', cid);
+      if (!response.ok) {
+        console.error('[AI Browser] Failed to get video info:', response.status);
+        return null;
+      }
 
-  // Get subtitle info from player API
-  const subtitleInfo = await getSubtitleInfo(bvid, cid);
-  if (!subtitleInfo) {
-    console.log('[AI Browser] No subtitle info returned');
-    return null;
-  }
-
-  // Look for any available subtitle (prefer AI subtitles, fall back to first subtitle)
-  const subtitles = subtitleInfo.subtitles || [];
-  let targetSubtitle = null;
-
-  // Prefer AI subtitle (lan === 'ai-zh')
-  for (const sub of subtitles) {
-    if (sub.lan === 'ai-zh' && sub.subtitle_url) {
-      targetSubtitle = sub;
-      break;
+      const data = await response.json();
+      if (data.code === 0 && data.data) {
+        return data.data;
+      }
+      console.error('[AI Browser] Video info API error:', data.message);
+      return null;
+    } catch (error) {
+      console.error('[AI Browser] Error getting video info:', error);
+      return null;
     }
   }
 
-  // Fallback: use the first available subtitle
-  if (!targetSubtitle && subtitles.length > 0 && subtitles[0].subtitle_url) {
-    targetSubtitle = subtitles[0];
+  // Get subtitle info from Bilibili player API
+  async function getSubtitleInfo(bvid, cid) {
+    // Try the Wbi API endpoint
+    const apiUrl = `https://api.bilibili.com/x/player/wbi/v2?bvid=${bvid}&cid=${cid}&isGaiaAvoided=false`;
+
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        credentials: 'include', // Include cookies from the page context
+      });
+
+      if (!response.ok) {
+        console.error('[AI Browser] Failed to get subtitle info:', response.status);
+        return null;
+      }
+
+      const data = await response.json();
+      if (data.code === 0 && data.data) {
+        return data.data.subtitle;
+      }
+      console.error('[AI Browser] Subtitle info API error:', data.message);
+      return null;
+    } catch (error) {
+      console.error('[AI Browser] Error getting subtitle info:', error);
+      return null;
+    }
   }
 
-  // Fallback: check if ai_subtitle exists directly (some API versions)
-  if (!targetSubtitle && subtitleInfo.ai_subtitle && subtitleInfo.ai_subtitle.subtitle_url) {
-    targetSubtitle = subtitleInfo.ai_subtitle;
+  // Download and parse subtitle content
+  async function downloadSubtitle(subtitleUrl) {
+    // Handle relative URLs
+    if (subtitleUrl.startsWith('//')) {
+      subtitleUrl = 'https:' + subtitleUrl;
+    }
+
+    try {
+      const response = await fetch(subtitleUrl, {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        console.error('[AI Browser] Failed to download subtitle:', response.status);
+        return null;
+      }
+
+      const data = await response.json();
+      // Subtitle body is in data.body array
+      const body = data.body || [];
+
+      if (body.length === 0) {
+        console.log('[AI Browser] Subtitle body is empty');
+        return null;
+      }
+
+      return body;
+    } catch (error) {
+      console.error('[AI Browser] Error downloading subtitle:', error);
+      return null;
+    }
   }
 
-  if (!targetSubtitle || !targetSubtitle.subtitle_url) {
-    console.log('[AI Browser] No subtitle available for this video');
-    return null;
-  }
+  // Main function to extract Bilibili AI subtitles
+  async function extractBilibiliSubtitle() {
+    const url = window.location.href;
 
-  console.log('[AI Browser] Found subtitle URL:', targetSubtitle.subtitle_url, '(', targetSubtitle.lan_doc || targetSubtitle.lan, ')');
+    // Extract bvid from URL
+    const bvid = extractBvidFromUrl(url);
+    if (!bvid) {
+      console.log('[AI Browser] Could not extract bvid from URL:', url);
+      return null;
+    }
+    console.log('[AI Browser] Extracted bvid:', bvid);
 
-  // Download and parse subtitle
-  const subtitleBody = await downloadSubtitle(targetSubtitle.subtitle_url);
-  if (!subtitleBody || subtitleBody.length === 0) {
-    console.error('[AI Browser] Failed to download subtitle content');
-    return null;
-  }
-
-  console.log('[AI Browser] Extracted', subtitleBody.length, 'subtitle lines');
-
-  return {
-    raw: subtitleBody,
-    count: subtitleBody.length
-  };
-}
-
-// ========== Bilibili Comment Extraction ==========
-
-// Fetch comments from Bilibili reply API
-async function fetchBilibiliComments(aid) {
-  if (!aid) {
-    console.log('[AI Browser] Could not get aid for comments');
-    return null;
-  }
-
-  const wts = Math.floor(Date.now() / 1000);
-  const apiUrl = `https://api.bilibili.com/x/v2/reply/wbi/main?oid=${aid}&type=1&mode=3&pagination_str=%7B%22offset%22:%22%22%7D&plat=1`;
-
-  try {
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      credentials: 'include',
-    });
-
-    if (!response.ok) {
-      console.error('[AI Browser] Failed to fetch comments:', response.status);
+    // Get video info to find cid
+    const videoInfo = await getVideoInfo(bvid);
+    if (!videoInfo) {
+      console.error('[AI Browser] Could not get video info');
       return null;
     }
 
-    const data = await response.json();
-    if (data.code !== 0 || !data.data) {
-      console.error('[AI Browser] Comment API error:', data.message);
+    // Get first cid (for multi-part videos, get the current part)
+    const pages = videoInfo.pages || [];
+    let cid = videoInfo.cid;
+
+    // If URL has p parameter, try to find the matching cid
+    const pMatch = url.match(/[?&]p=(\d+)/);
+    if (pMatch && pages.length > 0) {
+      const targetPage = parseInt(pMatch[1], 10) - 1;
+      if (pages[targetPage]) {
+        cid = pages[targetPage].cid;
+      }
+    } else if (pages.length > 0) {
+      cid = pages[0].cid;
+    }
+
+    if (!cid) {
+      console.error('[AI Browser] Could not find cid');
+      return null;
+    }
+    console.log('[AI Browser] Using cid:', cid);
+
+    // Get subtitle info from player API
+    const subtitleInfo = await getSubtitleInfo(bvid, cid);
+    if (!subtitleInfo) {
+      console.log('[AI Browser] No subtitle info returned');
       return null;
     }
 
-    return data.data;
-  } catch (error) {
-    console.error('[AI Browser] Error fetching comments:', error);
-    return null;
-  }
-}
+    // Look for any available subtitle (prefer AI subtitles, fall back to first subtitle)
+    const subtitles = subtitleInfo.subtitles || [];
+    let targetSubtitle = null;
 
-// Parse comment item to extract user, text, time
-function parseCommentItem(item) {
-  const user = item.member?.uname || '';
-  const text = item.content?.message || '';
-  const ctime = item.ctime ? new Date(item.ctime * 1000).toLocaleString('zh-CN') : '';
+    // Prefer AI subtitle (lan === 'ai-zh')
+    for (const sub of subtitles) {
+      if (sub.lan === 'ai-zh' && sub.subtitle_url) {
+        targetSubtitle = sub;
+        break;
+      }
+    }
 
-  return {
-    user,
-    text,
-    time: ctime,
-    like: item.like || 0,
-    isReply: item.root !== 0
-  };
-}
+    // Fallback: use the first available subtitle
+    if (!targetSubtitle && subtitles.length > 0 && subtitles[0].subtitle_url) {
+      targetSubtitle = subtitles[0];
+    }
 
-// Extract Bilibili comments via API
-async function extractBilibiliComments() {
-  const url = window.location.href;
-  const bvid = extractBvidFromUrl(url);
-  if (!bvid) {
-    console.log('[AI Browser] Could not extract bvid from URL:', url);
-    return [];
-  }
+    // Fallback: check if ai_subtitle exists directly (some API versions)
+    if (!targetSubtitle && subtitleInfo.ai_subtitle && subtitleInfo.ai_subtitle.subtitle_url) {
+      targetSubtitle = subtitleInfo.ai_subtitle;
+    }
 
-  // Get video info to get aid
-  const videoInfo = await getVideoInfo(bvid);
-  if (!videoInfo || !videoInfo.aid) {
-    console.log('[AI Browser] Could not get video info or aid');
-    return [];
-  }
+    if (!targetSubtitle || !targetSubtitle.subtitle_url) {
+      console.log('[AI Browser] No subtitle available for this video');
+      return null;
+    }
 
-  const aid = videoInfo.aid;
-  console.log('[AI Browser] Got aid:', aid);
+    console.log('[AI Browser] Found subtitle URL:', targetSubtitle.subtitle_url, '(', targetSubtitle.lan_doc || targetSubtitle.lan, ')');
 
-  const data = await fetchBilibiliComments(aid);
-  if (!data || !data.replies) {
-    console.log('[AI Browser] No comments returned');
-    return [];
+    // Download and parse subtitle
+    const subtitleBody = await downloadSubtitle(targetSubtitle.subtitle_url);
+    if (!subtitleBody || subtitleBody.length === 0) {
+      console.error('[AI Browser] Failed to download subtitle content');
+      return null;
+    }
+
+    console.log('[AI Browser] Extracted', subtitleBody.length, 'subtitle lines');
+
+    return {
+      raw: subtitleBody,
+      count: subtitleBody.length
+    };
   }
 
-  const comments = [];
+  // ========== Bilibili Comment Extraction ==========
 
-  // Process main comments and their replies
-  for (const reply of data.replies) {
-    if (reply.member && reply.content) {
-      comments.push(parseCommentItem(reply));
+  // Fetch comments from Bilibili reply API
+  async function fetchBilibiliComments(aid) {
+    if (!aid) {
+      console.log('[AI Browser] Could not get aid for comments');
+      return null;
+    }
 
-      // Process nested replies
-      if (reply.replies && Array.isArray(reply.replies)) {
-        for (const nestedReply of reply.replies) {
-          if (nestedReply.member && nestedReply.content) {
-            comments.push(parseCommentItem(nestedReply));
+    const wts = Math.floor(Date.now() / 1000);
+    const apiUrl = `https://api.bilibili.com/x/v2/reply/wbi/main?oid=${aid}&type=1&mode=3&pagination_str=%7B%22offset%22:%22%22%7D&plat=1`;
+
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        console.error('[AI Browser] Failed to fetch comments:', response.status);
+        return null;
+      }
+
+      const data = await response.json();
+      if (data.code !== 0 || !data.data) {
+        console.error('[AI Browser] Comment API error:', data.message);
+        return null;
+      }
+
+      return data.data;
+    } catch (error) {
+      console.error('[AI Browser] Error fetching comments:', error);
+      return null;
+    }
+  }
+
+  // Parse comment item to extract user, text, time
+  function parseCommentItem(item) {
+    const user = item.member?.uname || '';
+    const text = item.content?.message || '';
+    const ctime = item.ctime ? new Date(item.ctime * 1000).toLocaleString('zh-CN') : '';
+
+    return {
+      user,
+      text,
+      time: ctime,
+      like: item.like || 0,
+      isReply: item.root !== 0
+    };
+  }
+
+  // Extract Bilibili comments via API
+  async function extractBilibiliComments() {
+    const url = window.location.href;
+    const bvid = extractBvidFromUrl(url);
+    if (!bvid) {
+      console.log('[AI Browser] Could not extract bvid from URL:', url);
+      return [];
+    }
+
+    // Get video info to get aid
+    const videoInfo = await getVideoInfo(bvid);
+    if (!videoInfo || !videoInfo.aid) {
+      console.log('[AI Browser] Could not get video info or aid');
+      return [];
+    }
+
+    const aid = videoInfo.aid;
+    console.log('[AI Browser] Got aid:', aid);
+
+    const data = await fetchBilibiliComments(aid);
+    if (!data || !data.replies) {
+      console.log('[AI Browser] No comments returned');
+      return [];
+    }
+
+    const comments = [];
+
+    // Process main comments and their replies
+    for (const reply of data.replies) {
+      if (reply.member && reply.content) {
+        comments.push(parseCommentItem(reply));
+
+        // Process nested replies
+        if (reply.replies && Array.isArray(reply.replies)) {
+          for (const nestedReply of reply.replies) {
+            if (nestedReply.member && nestedReply.content) {
+              comments.push(parseCommentItem(nestedReply));
+            }
           }
         }
       }
     }
-  }
 
-  console.log('[AI Browser] Extracted', comments.length, 'comments');
-  return comments;
-}
+    console.log('[AI Browser] Extracted', comments.length, 'comments');
+    return comments;
+  }
 
   // ========== Immersive Translation ==========
 
@@ -768,7 +768,7 @@ async function extractBilibiliComments() {
   let translationIdCounter = 0; // Unique ID for each translation block
 
   // Track right-clicked element for context menu translation
-  document.addEventListener('contextmenu', function(e) {
+  document.addEventListener('contextmenu', function (e) {
     rightClickedElement = e.target;
   }, true);
 
@@ -836,11 +836,11 @@ async function extractBilibiliComments() {
     translationBlock.dataset.aiTransId = id;
     translationBlock.innerHTML =
       '<div class="ai-translation-header">' +
-        '<span class="ai-translation-label">🌐 中文翻译</span>' +
-        '<button class="ai-translation-delete-btn">✕ 删除</button>' +
+      '<span class="ai-translation-label">🌐 中文翻译</span>' +
+      '<button class="ai-translation-delete-btn">✕ 删除</button>' +
       '</div>' +
       '<div class="ai-translation-content">' +
-        '<span class="ai-loading-spinner"></span> 翻译中，请稍候...' +
+      '<span class="ai-loading-spinner"></span> 翻译中，请稍候...' +
       '</div>';
 
     const deleteBtn = translationBlock.querySelector('.ai-translation-delete-btn');
@@ -877,7 +877,7 @@ async function extractBilibiliComments() {
   }
 
   // Event delegation for delete button clicks on translation blocks
-  document.addEventListener('click', function(e) {
+  document.addEventListener('click', function (e) {
     const deleteBtn = e.target.closest('.ai-translation-delete-btn');
     if (!deleteBtn) return;
 
@@ -978,10 +978,56 @@ async function extractBilibiliComments() {
     return div.innerHTML;
   }
 
+  function tryExtractMarkdown() {
+    if (typeof TurndownService !== 'function' || !document.body) {
+      return null;
+    }
+
+    try {
+      const turndownService = new TurndownService({
+        headingStyle: 'atx',
+        bulletListMarker: '-',
+        codeBlockStyle: 'fenced'
+      });
+
+      const clone = document.body.cloneNode(true);
+
+      clone.querySelectorAll(
+        'script, style, noscript, iframe'
+      ).forEach(element => element.remove());
+
+      const markdown = turndownService.turndown(clone)
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+
+      return markdown || null;
+    } catch (error) {
+      console.debug(
+        '[AI Browser] Turndown 转换失败，将使用原有纯文本提取:',
+        error
+      );
+      return null;
+    }
+  }
+
+
   // Walk the DOM and find translatable paragraph-level elements
   // ========== Generic Content Extraction ==========
 
   function extractAllVisibleText() {
+    /* 
+      Let's try to extract markdown first
+      However The total length of Markdown extraction 
+      is Far long than the plain text extraction.
+      TODO Also Need to filter Sensitive information like password
+    */
+    const markdown = tryExtractMarkdown();
+
+    if (markdown) {
+      return markdown;
+    }
+
+    // If extracting markdown failed, try to extract plain text
     const texts = [];
 
     // Method 1: body.innerText (most websites work with this)
@@ -1005,11 +1051,11 @@ async function extractBilibiliComments() {
             const trimmed = line.trim();
             // Skip lines that look like CSS
             if (trimmed.startsWith(':host') || trimmed.startsWith('@font-face') ||
-                trimmed.startsWith('@keyframes') || trimmed.startsWith('.layer') ||
-                trimmed.startsWith('#canvas') || trimmed.startsWith('animation') ||
-                trimmed.includes('display:') || trimmed.includes('position:') ||
-                trimmed.includes('width:') || trimmed.includes('height:') ||
-                trimmed.startsWith('/*') || trimmed.startsWith('*')) {
+              trimmed.startsWith('@keyframes') || trimmed.startsWith('.layer') ||
+              trimmed.startsWith('#canvas') || trimmed.startsWith('animation') ||
+              trimmed.includes('display:') || trimmed.includes('position:') ||
+              trimmed.includes('width:') || trimmed.includes('height:') ||
+              trimmed.startsWith('/*') || trimmed.startsWith('*')) {
               return false;
             }
             return trimmed.length > 0;
@@ -1046,11 +1092,11 @@ async function extractBilibiliComments() {
       subtitles: null
     };
 
+    // Extract all visible text (generic) 
+    result.text = extractAllVisibleText();
+
     // Check if on Bilibili
     const isBilibili = result.url.includes('bilibili.com');
-
-    // Extract all visible text (generic)
-    result.text = extractAllVisibleText();
 
     // Extract Bilibili comments (returned separately, not appended to text)
     if (isBilibili) {

@@ -43,7 +43,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["awesome-video-list.js","highlight.js", "content.js"]
+      "js": ["awesome-video-list.js","highlight.js","turndown.min.js","content.js"]
     }
   ]
 }
