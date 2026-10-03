@@ -961,10 +961,47 @@ async function extractBilibiliComments() {
     return div.innerHTML;
   }
 
+  // Try to extract page content as Markdown using Turndown.
+  function tryExtractMarkdown() {
+    if (typeof TurndownService !== 'function' || !document.body) {
+      return null;
+    }
+
+    try {
+      const turndownService = new TurndownService({
+        headingStyle: 'atx',
+        bulletListMarker: '-',
+        codeBlockStyle: 'fenced'
+      });
+
+      const clone = document.body.cloneNode(true);
+      clone.querySelectorAll('script, style, noscript, iframe').forEach(element => element.remove());
+
+      const markdown = turndownService.turndown(clone)
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+
+      return markdown || null;
+    } catch (error) {
+      console.debug('[AI Browser] Turndown 转换失败，将使用原有纯文本提取:', error);
+      return null;
+    }
+  }
+
   // Walk the DOM and find translatable paragraph-level elements
   // ========== Generic Content Extraction ==========
 
   function extractAllVisibleText() {
+    // Try to extract markdown first.
+    // Note: markdown extraction tends to be much longer than plain text.
+    // TODO: also need to filter sensitive information like passwords.
+    const markdown = tryExtractMarkdown();
+
+    if (markdown) {
+      return markdown;
+    }
+
+    // If extracting markdown failed, try to extract plain text
     const texts = [];
 
     // Method 1: body.innerText (most websites work with this)
